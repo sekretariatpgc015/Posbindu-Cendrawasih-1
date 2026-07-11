@@ -1,0 +1,6 @@
+{
+  "name": "Posbindu PTM",
+  "description": "Aplikasi pencatatan Posbindu PTM untuk pemantauan faktor risiko penyakit tidak menular, kunjungan warga, dan laporan keuangan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
