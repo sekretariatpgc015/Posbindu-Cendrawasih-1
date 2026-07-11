@@ -45,7 +45,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
             </button>
             <button
               onClick={() => onNavigate('structure')}
-              className="bg-indigo-800/50 text-white border border-indigo-700/50 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-800 transition-colors cursor-pointer"
+              className="bg-[#FFAFCC] text-pink-950 border border-pink-300 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-300 transition-colors cursor-pointer shadow-sm"
             >
               Lihat Struktur Pengurus
               <ChevronRight className="w-5 h-5" />
@@ -59,24 +59,24 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
       </div>
 
       {/* Schedule Banner */}
-      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-6 sm:p-8 text-white shadow-sm border border-emerald-400/30 relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div className="bg-[#FFAFCC] rounded-2xl p-6 sm:p-8 text-slate-900 shadow-sm border border-pink-300 relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6 w-full">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md border border-white/30 shadow-inner">
-            <Calendar className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 bg-white/50 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-md border border-white/40 shadow-inner">
+            <Calendar className="w-8 h-8 text-pink-700" />
           </div>
           <div className="flex-1">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-3">Jadwal Giat Posbindu</h2>
-            <div className="flex flex-col md:flex-row gap-3 md:gap-6 text-emerald-50 font-medium text-sm">
-              <span className="flex items-center gap-2 bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm">
-                <Calendar className="w-4 h-4 shrink-0" />
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-3 text-slate-900">Jadwal Giat Posbindu</h2>
+            <div className="flex flex-col md:flex-row gap-3 md:gap-6 text-slate-800 font-medium text-sm">
+              <span className="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                <Calendar className="w-4 h-4 shrink-0 text-pink-700" />
                 Setiap Minggu Ke-2
               </span>
-              <span className="flex items-center gap-2 bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm">
-                <Clock className="w-4 h-4 shrink-0" />
+              <span className="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                <Clock className="w-4 h-4 shrink-0 text-pink-700" />
                 08.00 - 10.30 WIB
               </span>
-              <span className="flex items-center gap-2 bg-black/10 px-3 py-1.5 rounded-lg backdrop-blur-sm">
-                <MapPin className="w-4 h-4 shrink-0" />
+              <span className="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+                <MapPin className="w-4 h-4 shrink-0 text-pink-700" />
                 Balai Posyandu Blok B2 RT 004 RW 015
               </span>
             </div>
@@ -84,8 +84,8 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
         </div>
         
         {/* Background Decorative Elements */}
-        <div className="absolute -right-10 -top-10 w-64 h-64 bg-white rounded-full blur-3xl opacity-10 pointer-events-none" />
-        <div className="absolute right-40 -bottom-10 w-48 h-48 bg-emerald-900 rounded-full blur-3xl opacity-20 pointer-events-none" />
+        <div className="absolute -right-10 -top-10 w-64 h-64 bg-white rounded-full blur-3xl opacity-20 pointer-events-none" />
+        <div className="absolute right-40 -bottom-10 w-48 h-48 bg-pink-300 rounded-full blur-3xl opacity-30 pointer-events-none" />
       </div>
 
       {/* Quick Access Cards */}
@@ -137,11 +137,11 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
               id: 1,
               title: "Pemeriksaan Kesehatan Rutin Bulanan",
               category: "Skrining",
-              date: "14 Juni 2026",
-              location: "Balai Warga RW 015",
+              date: "11 Juni 2026",
+              location: "Balai Posbindu",
               description: "Skrining kesehatan berkala meliputi pengukuran tekanan darah, penimbangan berat badan, pemeriksaan kolesterol, dan konseling gizi terpadu.",
-              image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=800&q=80",
-              categoryColor: "bg-indigo-600"
+              image: "https://drive.google.com/thumbnail?id=1Lt_8phAAI8KLPHSXuUc45ImetD6ooi_1&sz=w1000",
+              categoryColor: "bg-[#FFAFCC] text-pink-950"
             },
             {
               id: 2,
@@ -151,7 +151,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
               location: "Ruang Pertemuan RW 015",
               description: "Penyuluhan bersama tenaga medis Puskesmas mengenai pencegahan dini diabetes melitus dan hipertensi melalui pola makan rendah garam dan gula.",
               image: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80",
-              categoryColor: "bg-rose-600"
+              categoryColor: "bg-rose-600 text-white"
             },
             {
               id: 3,
@@ -161,7 +161,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
               location: "Lapangan Olahraga RW 015",
               description: "Kegiatan senam bugar rutin setiap Sabtu pagi untuk meningkatkan kapasitas jantung dan pembuluh darah serta membangun kekompakan warga RW 015.",
               image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=800&q=80",
-              categoryColor: "bg-emerald-600"
+              categoryColor: "bg-emerald-600 text-white"
             }
           ].map((activity) => (
             <div key={activity.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-xs hover:shadow-md hover:border-slate-200/80 transition-all group">
@@ -173,7 +173,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                <span className={`absolute top-4 left-4 ${activity.categoryColor} text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm`}>
+                <span className={`absolute top-4 left-4 ${activity.categoryColor} text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm`}>
                   {activity.category}
                 </span>
               </div>
