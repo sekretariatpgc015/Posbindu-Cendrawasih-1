@@ -80,6 +80,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
   const [hb, setHb] = useState<string>('');
 
   // UI States
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [showNotification, setShowNotification] = useState<boolean>(false);
   const [notificationMessage, setNotificationMessage] = useState<string>('');
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
@@ -137,16 +138,149 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     ).slice(0, 5); // limit 5
   }, [wargaList, nikSearchQuery]);
 
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    // Tanggal Periksa
+    if (!tanggal) {
+      newErrors.tanggal = 'Tanggal pemeriksaan wajib diisi';
+    } else {
+      const selectedDate = new Date(tanggal);
+      const today = new Date();
+      if (selectedDate > today) {
+        newErrors.tanggal = 'Tanggal pemeriksaan tidak boleh di masa depan';
+      }
+    }
+
+    // NIK
+    if (!nik) {
+      newErrors.nik = 'NIK wajib diisi';
+    } else if (nik.length !== 16) {
+      newErrors.nik = 'NIK harus tepat 16 digit';
+    } else if (!/^\d+$/.test(nik)) {
+      newErrors.nik = 'NIK hanya boleh berisi angka';
+    }
+
+    // Nama
+    if (!nama.trim()) {
+      newErrors.nama = 'Nama lengkap wajib diisi';
+    } else if (nama.trim().length < 2) {
+      newErrors.nama = 'Nama lengkap minimal 2 karakter';
+    }
+
+    // Tanggal Lahir
+    if (!tanggalLahir) {
+      newErrors.tanggalLahir = 'Tanggal lahir wajib diisi';
+    } else {
+      const dob = new Date(tanggalLahir);
+      const today = new Date();
+      if (dob > today) {
+        newErrors.tanggalLahir = 'Tanggal lahir tidak boleh di masa depan';
+      } else {
+        const computedAge = calculateAge(tanggalLahir);
+        if (computedAge < 15) {
+          newErrors.tanggalLahir = 'Sasaran pemeriksaan PTM minimal berusia 15 tahun';
+        }
+      }
+    }
+
+    // RT
+    if (!rt) {
+      newErrors.rt = 'RT wajib diisi';
+    }
+
+    // KK (optional but if filled, must be 16 digits)
+    if (noKK && (noKK.length !== 16 || !/^\d+$/.test(noKK))) {
+      newErrors.noKK = 'No. KK harus tepat 16 digit angka';
+    }
+
+    // Alamat
+    if (!alamat.trim()) {
+      newErrors.alamat = 'Alamat lengkap wajib diisi';
+    }
+
+    // Health Metrics Validation (only if filled)
+    if (tdSistolik) {
+      const sysVal = parseInt(tdSistolik);
+      if (isNaN(sysVal) || sysVal < 50 || sysVal > 300) {
+        newErrors.tdSistolik = 'Sistolik tidak realistis (rentang valid: 50 - 300 mmHg)';
+      }
+    }
+    if (tdDiastolik) {
+      const diaVal = parseInt(tdDiastolik);
+      if (isNaN(diaVal) || diaVal < 30 || diaVal > 200) {
+        newErrors.tdDiastolik = 'Diastolik tidak realistis (rentang valid: 30 - 200 mmHg)';
+      }
+    }
+    // Check both if one is filled
+    if ((tdSistolik && !tdDiastolik) || (!tdSistolik && tdDiastolik)) {
+      newErrors.tdSistolik = 'Kedua nilai Sistolik & Diastolik harus diisi lengkap';
+      newErrors.tdDiastolik = 'Kedua nilai Sistolik & Diastolik harus diisi lengkap';
+    }
+
+    if (tb) {
+      const tbVal = parseFloat(tb);
+      if (isNaN(tbVal) || tbVal < 50 || tbVal > 250) {
+        newErrors.tb = 'Tinggi Badan tidak realistis (rentang valid: 50 - 250 cm)';
+      }
+    }
+
+    if (bb) {
+      const bbVal = parseFloat(bb);
+      if (isNaN(bbVal) || bbVal < 10 || bbVal > 300) {
+        newErrors.bb = 'Berat Badan tidak realistis (rentang valid: 10 - 300 kg)';
+      }
+    }
+
+    if (lp) {
+      const lpVal = parseFloat(lp);
+      if (isNaN(lpVal) || lpVal < 30 || lpVal > 200) {
+        newErrors.lp = 'Lingkar Perut tidak realistis (rentang valid: 30 - 200 cm)';
+      }
+    }
+
+    if (gds) {
+      const gdsVal = parseInt(gds);
+      if (isNaN(gdsVal) || gdsVal < 30 || gdsVal > 600) {
+        newErrors.gds = 'Nilai GDS tidak realistis (rentang valid: 30 - 600 mg/dL)';
+      }
+    }
+
+    if (chol) {
+      const cholVal = parseInt(chol);
+      if (isNaN(cholVal) || cholVal < 50 || cholVal > 500) {
+        newErrors.chol = 'Nilai Kolesterol tidak realistis (rentang valid: 50 - 500 mg/dL)';
+      }
+    }
+
+    if (au) {
+      const auVal = parseFloat(au);
+      if (isNaN(auVal) || auVal < 1 || auVal > 25) {
+        newErrors.au = 'Nilai Asam Urat tidak realistis (rentang valid: 1.0 - 25.0 mg/dL)';
+      }
+    }
+
+    if (hb) {
+      const hbVal = parseFloat(hb);
+      if (isNaN(hbVal) || hbVal < 3 || hbVal > 25) {
+        newErrors.hb = 'Nilai Hemoglobin tidak realistis (rentang valid: 3.0 - 25.0 g/dL)';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validations
-    if (!tanggal) { alert('Harap isi Tanggal pemeriksaan.'); return; }
-    if (!nama) { alert('Harap isi Nama warga.'); return; }
-    if (!nik || nik.length !== 16) { alert('Harap masukkan NIK 16 digit yang valid.'); return; }
-    if (!tanggalLahir) { alert('Harap isi Tanggal Lahir warga.'); return; }
-    if (!alamat) { alert('Harap isi Alamat warga.'); return; }
-    if (!rt) { alert('Harap isi RT.'); return; }
+    if (!validateForm()) {
+      const container = document.getElementById('form-ptm-container');
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
 
     // Assemble Kunjungan object
     const finalSistolik = parseInt(tdSistolik) || 120;
@@ -196,6 +330,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     // Show success notification & reset inputs (except date)
     setNotificationMessage(`Pemeriksaan ke-${nextNo} atas nama ${nama} berhasil disimpan!`);
     setShowNotification(true);
+    setErrors({});
 
     // Reset fields
     setNik('');
@@ -222,25 +357,27 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     }, 1500);
   };
 
+  const [showConfirmReset, setShowConfirmReset] = useState<boolean>(false);
+
   const resetForm = () => {
-    if (window.confirm('Apakah Anda yakin ingin mengosongkan seluruh formulir?')) {
-      setNik('');
-      setNama('');
-      setJenisKelamin('Laki-laki');
-      setTanggalLahir('');
-      setAlamat('');
-      setRt('01');
-      setNoKK('');
-      setTdSistolik('');
-      setTdDiastolik('');
-      setTb('');
-      setBb('');
-      setLp('');
-      setGds('');
-      setChol('');
-      setAu('');
-      setHb('');
-    }
+    setNik('');
+    setNama('');
+    setJenisKelamin('Laki-laki');
+    setTanggalLahir('');
+    setAlamat('');
+    setRt('01');
+    setNoKK('');
+    setTdSistolik('');
+    setTdDiastolik('');
+    setTb('');
+    setBb('');
+    setLp('');
+    setGds('');
+    setChol('');
+    setAu('');
+    setHb('');
+    setErrors({});
+    setShowConfirmReset(false);
   };
 
   const [tableSearch, setTableSearch] = useState('');
@@ -468,6 +605,19 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
 
       {/* Main Form */}
       <form onSubmit={handleSubmit} className="space-y-6" id="ptm-form-element">
+        {Object.keys(errors).length > 0 && (
+          <div id="validation-errors-banner" className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-semibold flex flex-col gap-1.5 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4.5 h-4.5 text-red-600" />
+              <span>Harap perbaiki beberapa kesalahan berikut sebelum menyimpan:</span>
+            </div>
+            <ul className="list-disc pl-5 font-normal text-[11px] text-red-700 space-y-0.5">
+              {Object.entries(errors).map(([field, err]) => (
+                <li key={field}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         
         {/* Section 1: Demographics */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
@@ -495,10 +645,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 type="date"
                 required
                 value={tanggal}
-                onChange={(e) => setTanggal(e.target.value)}
+                onChange={(e) => {
+                  setTanggal(e.target.value);
+                  if (errors.tanggal) setErrors(prev => { const copy = { ...prev }; delete copy.tanggal; return copy; });
+                }}
                 id="input-tanggal-ptm"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.tanggal ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all`}
               />
+              {errors.tanggal && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.tanggal}</span>
+              )}
             </div>
 
             {/* NIK */}
@@ -510,10 +666,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 maxLength={16}
                 placeholder="Masukkan NIK KTP..."
                 value={nik}
-                onChange={(e) => handleNikChange(e.target.value)}
+                onChange={(e) => {
+                  handleNikChange(e.target.value);
+                  if (errors.nik) setErrors(prev => { const copy = { ...prev }; delete copy.nik; return copy; });
+                }}
                 id="input-nik"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-mono outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.nik ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl font-mono outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all`}
               />
+              {errors.nik && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.nik}</span>
+              )}
             </div>
           </div>
 
@@ -526,10 +688,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 required
                 placeholder="Nama sesuai KTP..."
                 value={nama}
-                onChange={(e) => setNama(e.target.value)}
+                onChange={(e) => {
+                  setNama(e.target.value);
+                  if (errors.nama) setErrors(prev => { const copy = { ...prev }; delete copy.nama; return copy; });
+                }}
                 id="input-nama"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-semibold outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.nama ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl font-semibold outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all`}
               />
+              {errors.nama && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.nama}</span>
+              )}
             </div>
 
             {/* Jenis Kelamin */}
@@ -553,10 +721,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 type="date"
                 required
                 value={tanggalLahir}
-                onChange={(e) => setTanggalLahir(e.target.value)}
+                onChange={(e) => {
+                  setTanggalLahir(e.target.value);
+                  if (errors.tanggalLahir) setErrors(prev => { const copy = { ...prev }; delete copy.tanggalLahir; return copy; });
+                }}
                 id="input-dob"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.tanggalLahir ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all`}
               />
+              {errors.tanggalLahir && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.tanggalLahir}</span>
+              )}
             </div>
           </div>
 
@@ -577,9 +751,12 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
               <label className="block text-xs font-semibold text-slate-500 mb-1.5">Rukun Tetangga (RT) <span className="text-red-500">*</span></label>
               <select
                 value={rt}
-                onChange={(e) => setRt(e.target.value)}
+                onChange={(e) => {
+                  setRt(e.target.value);
+                  if (errors.rt) setErrors(prev => { const copy = { ...prev }; delete copy.rt; return copy; });
+                }}
                 id="input-rt"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer"
+                className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.rt ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer`}
               >
                 <option value="01">RT 01</option>
                 <option value="02">RT 02</option>
@@ -587,6 +764,9 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 <option value="04">RT 04</option>
                 <option value="05">RT 05</option>
               </select>
+              {errors.rt && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.rt}</span>
+              )}
             </div>
 
             {/* No KK (Optional for registration) */}
@@ -596,10 +776,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 type="text"
                 placeholder="Isi jika pendaftaran warga baru..."
                 value={noKK}
-                onChange={(e) => setNoKK(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  setNoKK(e.target.value.replace(/\D/g, ''));
+                  if (errors.noKK) setErrors(prev => { const copy = { ...prev }; delete copy.noKK; return copy; });
+                }}
                 id="input-kk"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-mono outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.noKK ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl font-mono outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all`}
               />
+              {errors.noKK && (
+                <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.noKK}</span>
+              )}
             </div>
           </div>
 
@@ -611,10 +797,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
               rows={2}
               placeholder="Alamat rumah..."
               value={alamat}
-              onChange={(e) => setAlamat(e.target.value)}
+              onChange={(e) => {
+                setAlamat(e.target.value);
+                if (errors.alamat) setErrors(prev => { const copy = { ...prev }; delete copy.alamat; return copy; });
+              }}
               id="input-alamat"
-              className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all resize-none"
+              className={`w-full px-3 py-2.5 text-xs bg-slate-50 border ${errors.alamat ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all resize-none`}
             />
+            {errors.alamat && (
+              <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.alamat}</span>
+            )}
           </div>
         </div>
 
@@ -637,9 +829,12 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     type="number"
                     placeholder="Sistolik"
                     value={tdSistolik}
-                    onChange={(e) => setTdSistolik(e.target.value)}
+                    onChange={(e) => {
+                      setTdSistolik(e.target.value);
+                      if (errors.tdSistolik) setErrors(prev => { const copy = { ...prev }; delete copy.tdSistolik; return copy; });
+                    }}
                     id="input-td-systolic"
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-center font-bold"
+                    className={`w-full px-3 py-2 text-xs bg-white border ${errors.tdSistolik ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-center font-bold`}
                   />
                   <span className="text-[9px] text-slate-400 text-center block mt-1">Sistolik (cth: 120)</span>
                 </div>
@@ -649,14 +844,20 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     type="number"
                     placeholder="Diastolik"
                     value={tdDiastolik}
-                    onChange={(e) => setTdDiastolik(e.target.value)}
+                    onChange={(e) => {
+                      setTdDiastolik(e.target.value);
+                      if (errors.tdDiastolik) setErrors(prev => { const copy = { ...prev }; delete copy.tdDiastolik; return copy; });
+                    }}
                     id="input-td-diastolic"
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-center font-bold"
+                    className={`w-full px-3 py-2 text-xs bg-white border ${errors.tdDiastolik ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-center font-bold`}
                   />
                   <span className="text-[9px] text-slate-400 text-center block mt-1">Diastolik (cth: 80)</span>
                 </div>
                 <span className="text-xs text-slate-500 font-medium whitespace-nowrap self-start mt-2">mmHg</span>
               </div>
+              {(errors.tdSistolik || errors.tdDiastolik) && (
+                <span className="text-[10px] text-red-500 font-semibold block">{errors.tdSistolik || errors.tdDiastolik}</span>
+              )}
               
               {/* Hypertension warning indicator */}
               {tdSistolik && tdDiastolik && (parseInt(tdSistolik) >= 139 || parseInt(tdDiastolik) >= 89) && (
@@ -677,12 +878,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     step="0.1"
                     placeholder="Cth: 165"
                     value={tb}
-                    onChange={(e) => setTb(e.target.value)}
+                    onChange={(e) => {
+                      setTb(e.target.value);
+                      if (errors.tb) setErrors(prev => { const copy = { ...prev }; delete copy.tb; return copy; });
+                    }}
                     id="input-tb"
-                    className="w-full pr-10 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center font-semibold"
+                    className={`w-full pr-10 pl-3 py-2 text-xs bg-white border ${errors.tb ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center font-semibold`}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">cm</span>
                 </div>
+                {errors.tb && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.tb}</span>
+                )}
               </div>
             </div>
 
@@ -696,12 +903,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     step="0.1"
                     placeholder="Cth: 62.5"
                     value={bb}
-                    onChange={(e) => setBb(e.target.value)}
+                    onChange={(e) => {
+                      setBb(e.target.value);
+                      if (errors.bb) setErrors(prev => { const copy = { ...prev }; delete copy.bb; return copy; });
+                    }}
                     id="input-bb"
-                    className="w-full pr-10 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center font-semibold"
+                    className={`w-full pr-10 pl-3 py-2 text-xs bg-white border ${errors.bb ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center font-semibold`}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">kg</span>
                 </div>
+                {errors.bb && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.bb}</span>
+                )}
               </div>
             </div>
           </div>
@@ -716,12 +929,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     type="number"
                     placeholder="Cth: 85"
                     value={lp}
-                    onChange={(e) => setLp(e.target.value)}
+                    onChange={(e) => {
+                      setLp(e.target.value);
+                      if (errors.lp) setErrors(prev => { const copy = { ...prev }; delete copy.lp; return copy; });
+                    }}
                     id="input-lp"
-                    className="w-full pr-10 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center"
+                    className={`w-full pr-10 pl-3 py-2 text-xs bg-white border ${errors.lp ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center`}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">cm</span>
                 </div>
+                {errors.lp && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.lp}</span>
+                )}
               </div>
               <span className="text-[9px] text-slate-400 block mt-1">Batas aman: L &le; 90, P &le; 80 cm</span>
             </div>
@@ -735,12 +954,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     type="number"
                     placeholder="Cth: 120"
                     value={gds}
-                    onChange={(e) => setGds(e.target.value)}
+                    onChange={(e) => {
+                      setGds(e.target.value);
+                      if (errors.gds) setErrors(prev => { const copy = { ...prev }; delete copy.gds; return copy; });
+                    }}
                     id="input-gds"
-                    className="w-full pr-12 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center"
+                    className={`w-full pr-12 pl-3 py-2 text-xs bg-white border ${errors.gds ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center`}
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-semibold">mg/dL</span>
                 </div>
+                {errors.gds && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.gds}</span>
+                )}
               </div>
               <span className="text-[9px] text-slate-400 block mt-1">Normal: &lt; 200 mg/dL</span>
             </div>
@@ -754,12 +979,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     type="number"
                     placeholder="Cth: 190"
                     value={chol}
-                    onChange={(e) => setChol(e.target.value)}
+                    onChange={(e) => {
+                      setChol(e.target.value);
+                      if (errors.chol) setErrors(prev => { const copy = { ...prev }; delete copy.chol; return copy; });
+                    }}
                     id="input-chol"
-                    className="w-full pr-12 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center"
+                    className={`w-full pr-12 pl-3 py-2 text-xs bg-white border ${errors.chol ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center`}
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-semibold">mg/dL</span>
                 </div>
+                {errors.chol && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.chol}</span>
+                )}
               </div>
               <span className="text-[9px] text-slate-400 block mt-1">Normal: &lt; 200 mg/dL</span>
             </div>
@@ -774,12 +1005,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     step="0.1"
                     placeholder="Cth: 5.4"
                     value={au}
-                    onChange={(e) => setAu(e.target.value)}
+                    onChange={(e) => {
+                      setAu(e.target.value);
+                      if (errors.au) setErrors(prev => { const copy = { ...prev }; delete copy.au; return copy; });
+                    }}
                     id="input-au"
-                    className="w-full pr-12 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center"
+                    className={`w-full pr-12 pl-3 py-2 text-xs bg-white border ${errors.au ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center`}
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-semibold">mg/dL</span>
                 </div>
+                {errors.au && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.au}</span>
+                )}
               </div>
               <span className="text-[9px] text-slate-400 block mt-1">Normal: L &le; 7.0, P &le; 6.0</span>
             </div>
@@ -794,12 +1031,18 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     step="0.1"
                     placeholder="Cth: 13.8"
                     value={hb}
-                    onChange={(e) => setHb(e.target.value)}
+                    onChange={(e) => {
+                      setHb(e.target.value);
+                      if (errors.hb) setErrors(prev => { const copy = { ...prev }; delete copy.hb; return copy; });
+                    }}
                     id="input-hb"
-                    className="w-full pr-10 pl-3 py-2 text-xs bg-white border border-slate-200 text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center"
+                    className={`w-full pr-10 pl-3 py-2 text-xs bg-white border ${errors.hb ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-center`}
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-semibold">g/dL</span>
                 </div>
+                {errors.hb && (
+                  <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.hb}</span>
+                )}
               </div>
               <span className="text-[9px] text-slate-400 block mt-1">Normal: L: 13-17, P: 12-15</span>
             </div>

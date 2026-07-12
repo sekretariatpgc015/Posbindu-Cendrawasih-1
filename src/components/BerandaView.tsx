@@ -38,7 +38,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
           <div className="flex flex-wrap gap-4">
             <button
               onClick={() => onNavigate('dashboard')}
-              className="bg-white text-indigo-900 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-50 transition-colors shadow-lg shadow-indigo-900/20 cursor-pointer"
+              className="bg-white text-pink-950 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-50 transition-colors shadow-lg shadow-pink-900/10 cursor-pointer"
             >
               Lihat Dashboard Statistik
               <ChevronRight className="w-5 h-5" />
@@ -131,7 +131,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex overflow-x-auto gap-6 pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
           {[
             {
               id: 1,
@@ -144,27 +144,27 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
               categoryColor: "bg-[#FFAFCC] text-pink-950"
             },
             {
-              id: 2,
-              title: "Edukasi & Sosialisasi Gizi Seimbang",
-              category: "Edukasi",
-              date: "24 Mei 2026",
-              location: "Ruang Pertemuan RW 015",
-              description: "Penyuluhan bersama tenaga medis Puskesmas mengenai pencegahan dini diabetes melitus dan hipertensi melalui pola makan rendah garam dan gula.",
-              image: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80",
-              categoryColor: "bg-rose-600 text-white"
+              id: 3,
+              title: "Giat Posbindu",
+              category: "Skrining",
+              date: "7 Mei 2026",
+              location: "Balai Posbindu",
+              description: "Kegiatan rutin pemeriksaan kesehatan",
+              image: "https://drive.google.com/thumbnail?id=1ozvh1ncBXQjKGJYb3qDL6SDEaM8k_0xA&sz=w1000",
+              categoryColor: "bg-indigo-600 text-white"
             },
             {
-              id: 3,
-              title: "Senam Jantung Sehat Bersama",
-              category: "Olahraga",
-              date: "09 Mei 2026",
-              location: "Lapangan Olahraga RW 015",
-              description: "Kegiatan senam bugar rutin setiap Sabtu pagi untuk meningkatkan kapasitas jantung dan pembuluh darah serta membangun kekompakan warga RW 015.",
-              image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=800&q=80",
-              categoryColor: "bg-emerald-600 text-white"
+              id: 2,
+              title: "Validasi Input Data PTM",
+              category: "Edukasi",
+              date: "24 April 2026",
+              location: "Puskesmas Wanajaya",
+              description: "Penyuluhan bersama tenaga medis Puskesmas mengenai pencegahan dini diabetes melitus dan hipertensi melalui pola makan rendah garam dan gula.",
+              image: "https://drive.google.com/thumbnail?id=1W7usTQQ6bcdH5Rets5AMuds7h3f2J49c&sz=w1000",
+              categoryColor: "bg-rose-600 text-white"
             }
           ].map((activity) => (
-            <div key={activity.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-xs hover:shadow-md hover:border-slate-200/80 transition-all group">
+            <div key={activity.id} className="w-[280px] sm:w-[320px] md:w-[360px] shrink-0 snap-start bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-xs hover:shadow-md hover:border-slate-200/80 transition-all group">
               {/* Image with category badge */}
               <div className="relative h-48 overflow-hidden bg-slate-100">
                 <img 
@@ -179,7 +179,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
               </div>
 
               {/* Content block */}
-              <div className="p-5 flex flex-col justify-between h-56">
+              <div className="p-5 flex flex-col justify-between h-40">
                 <div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-400 text-[11px] mb-2.5">
                     <span className="flex items-center gap-1">
@@ -197,11 +197,6 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
                   <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
                     {activity.description}
                   </p>
-                </div>
-
-                <div className="border-t border-slate-50 pt-3 flex items-center justify-between text-[11px] font-bold text-indigo-600 group-hover:text-indigo-700">
-                  <span>Lihat Detail</span>
-                  <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </div>
               </div>
             </div>
