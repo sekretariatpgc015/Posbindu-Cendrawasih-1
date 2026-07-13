@@ -109,7 +109,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     setNikSearchQuery('');
     
     // Notification for helpful feedback
-    setNotificationMessage(`Data warga "${citizen.nama}" ditemukan dan diisi otomatis!`);
+    setNotificationMessage(`Data warga "${citizen.nama}" ditemukan di database RW 015 dan diisi otomatis!`);
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 3000);
   };
@@ -554,13 +554,13 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
 
       {/* Citizen search helper card */}
       <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Cari Warga Terdaftar (Opsi Cepat)</h2>
+        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Cari Data Warga (Database RW 015)</h2>
         <div className="relative">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Masukkan Nama atau NIK warga untuk mengisi form otomatis..."
+              placeholder="Masukkan Nama atau NIK warga untuk mengambil data dari database RW 015..."
               value={nikSearchQuery}
               onChange={(e) => {
                 setNikSearchQuery(e.target.value);
@@ -597,7 +597,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
 
           {showSuggestions && nikSearchQuery && suggestions.length === 0 && (
             <div className="absolute z-10 w-full bg-white border border-slate-200 rounded-xl mt-1.5 p-4 text-center text-xs text-slate-400 shadow-lg">
-              Warga tidak ditemukan. Anda dapat mengisi formulir di bawah secara manual untuk mendaftarkannya secara otomatis.
+              Data warga tidak ditemukan di database RW 015. Anda dapat mengisi formulir di bawah secara manual untuk mendaftarkannya secara otomatis.
             </div>
           )}
         </div>
@@ -623,7 +623,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
           <div className="border-b border-slate-100 pb-3">
             <h2 className="text-sm font-bold text-slate-800">1. Data Demografis Warga</h2>
-            <p className="text-[11px] text-slate-400">Pastikan data identitas diisi dengan lengkap dan sesuai KTP.</p>
+            <p className="text-[11px] text-slate-400">Data demografis diambil dari database RW 015. Pastikan data identitas diisi dengan lengkap dan sesuai KTP.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

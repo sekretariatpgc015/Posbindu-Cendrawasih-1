@@ -64,15 +64,34 @@ export function parseDateToYYYYMMDD(dateStr: string): string {
   return dateStr;
 }
 
+const DIRECT_WARGA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTYG3FkCHn7OXTyiLCtqdLwFkFexQQVXVlPtwpxIOlzWt3mpcCZbMyYDp2p4PabbbQnB1GciwkokN20/pub?gid=1055267267&single=true&output=csv';
+const DIRECT_KUNJUNGAN_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTYG3FkCHn7OXTyiLCtqdLwFkFexQQVXVlPtwpxIOlzWt3mpcCZbMyYDp2p4PabbbQnB1GciwkokN20/pub?gid=0&single=true&output=csv';
+
 /**
- * Fetches and parses citizen data from Google Sheets CSV URL
+ * Fetches and parses citizen data from Google Sheets CSV URL with fallback
  */
 export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  let csvText = '';
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    csvText = await response.text();
+  } catch (proxyError) {
+    console.warn('Failed to fetch via proxy, trying direct Google Sheet request:', proxyError);
+    try {
+      const directResponse = await fetch(DIRECT_WARGA_URL);
+      if (!directResponse.ok) {
+        throw new Error(`HTTP error from direct sheets! status: ${directResponse.status}`);
+      }
+      csvText = await directResponse.text();
+    } catch (directError: any) {
+      console.error('Both proxy and direct Google Sheet fetch failed:', directError);
+      throw new Error(`Gagal memuat data warga: ${directError.message || directError}`);
+    }
   }
-  const csvText = await response.text();
+  
   const rows = parseCSV(csvText);
   
   if (rows.length < 2) {
@@ -132,14 +151,30 @@ export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
 }
 
 /**
- * Fetches and parses visit (kunjungan) data from Google Sheets CSV URL
+ * Fetches and parses visit (kunjungan) data from Google Sheets CSV URL with fallback
  */
 export async function fetchGoogleSheetKunjungan(url: string): Promise<Kunjungan[]> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  let csvText = '';
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    csvText = await response.text();
+  } catch (proxyError) {
+    console.warn('Failed to fetch via proxy, trying direct Google Sheet request for kunjungan:', proxyError);
+    try {
+      const directResponse = await fetch(DIRECT_KUNJUNGAN_URL);
+      if (!directResponse.ok) {
+        throw new Error(`HTTP error from direct sheets! status: ${directResponse.status}`);
+      }
+      csvText = await directResponse.text();
+    } catch (directError: any) {
+      console.error('Both proxy and direct Google Sheet fetch failed for kunjungan:', directError);
+      throw new Error(`Gagal memuat data kunjungan: ${directError.message || directError}`);
+    }
   }
-  const csvText = await response.text();
+  
   const rows = parseCSV(csvText);
   
   if (rows.length < 2) {

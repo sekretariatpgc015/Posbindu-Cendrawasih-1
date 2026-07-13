@@ -32,7 +32,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
             Selamat Datang di Posbindu PTM Cendrawasih 1
           </h1>
           <p className="text-slate-800 text-lg mb-8 leading-relaxed">
-            Platform terpadu untuk pencatatan, pemantauan, dan pelaporan kesehatan warga RW 015. 
+            Platform terpadu untuk pencatatan, pemantauan, dan pelaporan kesehatan warga RW 015 Pesona Gading Cibitung. 
             Mendukung deteksi dini Penyakit Tidak Menular (PTM) menuju masyarakat yang lebih sehat.
           </p>
           <div className="flex flex-wrap gap-4">
@@ -134,16 +134,6 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
         <div className="flex overflow-x-auto gap-6 pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
           {[
             {
-              id: 1,
-              title: "Pemeriksaan Kesehatan Rutin Bulanan",
-              category: "Skrining",
-              date: "11 Juni 2026",
-              location: "Balai Posbindu",
-              description: "Skrining kesehatan berkala meliputi pengukuran tekanan darah, penimbangan berat badan, pemeriksaan kolesterol, dan konseling gizi terpadu.",
-              image: "https://drive.google.com/thumbnail?id=1Lt_8phAAI8KLPHSXuUc45ImetD6ooi_1&sz=w1000",
-              categoryColor: "bg-[#FFAFCC] text-pink-950"
-            },
-            {
               id: 3,
               title: "Giat Posbindu",
               category: "Skrining",
@@ -162,6 +152,16 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
               description: "Penyuluhan bersama tenaga medis Puskesmas mengenai pencegahan dini diabetes melitus dan hipertensi melalui pola makan rendah garam dan gula.",
               image: "https://drive.google.com/thumbnail?id=1W7usTQQ6bcdH5Rets5AMuds7h3f2J49c&sz=w1000",
               categoryColor: "bg-rose-600 text-white"
+            },
+            {
+              id: 1,
+              title: "Pemeriksaan Kesehatan Rutin Bulanan",
+              category: "Skrining",
+              date: "11 Juni 2026",
+              location: "Balai Posbindu",
+              description: "Skrining kesehatan berkala meliputi pengukuran tekanan darah, penimbangan berat badan, pemeriksaan kolesterol, dan konseling gizi terpadu.",
+              image: "https://drive.google.com/thumbnail?id=1Lt_8phAAI8KLPHSXuUc45ImetD6ooi_1&sz=w1000",
+              categoryColor: "bg-[#FFAFCC] text-pink-950"
             }
           ].map((activity) => (
             <div key={activity.id} className="w-[280px] sm:w-[320px] md:w-[360px] shrink-0 snap-start bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-xs hover:shadow-md hover:border-slate-200/80 transition-all group">

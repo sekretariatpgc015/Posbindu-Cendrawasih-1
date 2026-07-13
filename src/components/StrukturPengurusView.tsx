@@ -165,8 +165,8 @@ export default function StrukturPengurusView() {
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Total Personel</div>
-              <div className="text-xl font-extrabold text-white">{pengurusData.length} Orang</div>
+              <div className="text-[10px] text-pink-800 font-bold uppercase tracking-wider">Total Personel</div>
+              <div className="text-xl font-extrabold text-slate-950">{pengurusData.length} Orang</div>
             </div>
           </div>
         </div>

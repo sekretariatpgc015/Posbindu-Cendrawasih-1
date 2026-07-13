@@ -80,7 +80,7 @@ export default function Navbar({ activeTab, onChangeTab, isOpenMobile, onToggleM
   return (
     <>
       {/* Top Navbar */}
-      <header className="w-full bg-[#FFAFCC] border-b border-pink-200 sticky top-0 z-30 shadow-md">
+      <header className="w-full bg-[#FFAFCC] border-b border-pink-200 sticky top-0 z-30 shadow-md print:hidden">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           
           {/* Brand Logo & Name */}

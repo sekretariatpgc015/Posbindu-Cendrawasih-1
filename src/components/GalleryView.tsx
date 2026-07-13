@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Image, ChevronLeft, ChevronRight, X, Calendar, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Calendar, MapPin } from 'lucide-react';
 
 interface ImageItem {
   url: string;
@@ -132,6 +132,22 @@ const ActivityGallerySection: React.FC<ActivityGallerySectionProps> = ({
 export default function GalleryView() {
   const activities: Activity[] = [
     {
+      id: 3,
+      title: "Giat Posbindu",
+      date: "7 Mei 2026",
+      location: "Balai Posbindu",
+      images: [
+        { url: "https://drive.google.com/thumbnail?id=1ozvh1ncBXQjKGJYb3qDL6SDEaM8k_0xA&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1T6qaELuPdbKvk7luxM0pQpprIs1ESxT2&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1-HbM0d_Xojdae6EKR-gomKzg_MDYZhpt&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1A-k8Tx1A6bGQjjEoXQJyQT5HExlXD1Fm&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1zKtNukBEtkSGvXt2h_0Bn9UR1M3YjLX3&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1wx9aXpm3NOGBGNghwinIOBymLKyf3niM&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1YJ3yEomncSqb4LaGE7IiLYvNbp7_BdWh&sz=w1000", alt: "Giat Posbindu" },
+        { url: "https://drive.google.com/thumbnail?id=1wn1m7R8wUizWUzJxl8HHdjlW4XCzxKGE&sz=w1000", alt: "Giat Posbindu" }
+      ]
+    },
+    {
       id: 1,
       title: "Validasi Input Data PTM",
       date: "20 April 2026",
@@ -157,8 +173,6 @@ export default function GalleryView() {
       ]
     }
   ];
-
-  const totalImagesCount = activities.reduce((acc, act) => acc + act.images.length, 0);
 
   const [selectedActivityIndex, setSelectedActivityIndex] = useState<number | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
@@ -196,10 +210,6 @@ export default function GalleryView() {
         <div>
           <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dokumentasi Posbindu</h1>
           <p className="text-xs text-slate-500 mt-1">Dokumentasi kegiatan Posbindu PTM Cendrawasih 1.</p>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold border border-indigo-100">
-          <Image className="w-5 h-5" />
-          <span>{totalImagesCount} Foto</span>
         </div>
       </div>
 

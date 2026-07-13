@@ -232,7 +232,7 @@ export default function App() {
         </div>
 
         {/* Subtle Footer with developer reset helper */}
-        <footer className="mt-16 border-t border-slate-200 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400">
+        <footer className="mt-16 border-t border-slate-200 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400 print:hidden">
           <div className="flex items-center gap-2">
             <HeartPulse className="w-4 h-4 text-emerald-600" />
             <span>Sistem Informasi Posbindu PTM Cendrawasih 1 &copy; 2026</span>
