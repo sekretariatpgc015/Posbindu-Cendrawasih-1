@@ -120,8 +120,8 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
       }
       return { ...item, saldoBerjalan: currentBalance };
     });
-    // Reverse so newest is at the top
-    return computed.reverse();
+    
+    return computed;
   }, [keuanganList]);
 
   // Filter and Search Ledger
