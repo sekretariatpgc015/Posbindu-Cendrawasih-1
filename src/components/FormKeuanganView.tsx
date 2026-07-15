@@ -46,12 +46,18 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
 
   // Google Apps Script Integration State
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
-    return localStorage.getItem('posbindu_apps_script_url') || 'https://script.google.com/macros/s/AKfycbyD7I2_4U0mU9zX-YF878787721_example/exec';
+    const stored = localStorage.getItem('posbindu_apps_script_url');
+    // Clear out the dummy example URL if it was saved to localStorage
+    if (stored && stored.includes('_example/exec')) {
+      localStorage.removeItem('posbindu_apps_script_url');
+      return '';
+    }
+    return stored || '';
   });
   const [sendToGSheets, setSendToGSheets] = useState<boolean>(() => {
-    const stored = localStorage.getItem('posbindu_send_to_gsheets');
-    return stored !== null ? stored === 'true' : true;
+    return localStorage.getItem('posbindu_send_to_gsheets') === 'true';
   });
   const [isSubmittingToGSheets, setIsSubmittingToGSheets] = useState<boolean>(false);
   const [showAppsScriptInstructions, setShowAppsScriptInstructions] = useState<boolean>(false);
@@ -78,11 +84,77 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
     setIsSyncing(true);
     setSyncError(null);
     try {
-      // 1. Fetch Kas Posbindu
-      const posbinduRecords = await fetchGoogleSheetKeuangan('/api/proxy-keuangan', 'Kas Posbindu');
-      
-      // 2. Fetch Kas Cek Darah
-      const cekDarahRecords = await fetchGoogleSheetKeuangan('/api/proxy-keuangan-cekdarah', 'Kas Cek Darah');
+      let posbinduRecords: KeuanganRecord[] = [];
+      let cekDarahRecords: KeuanganRecord[] = [];
+      let fetchedUsingAppsScript = false;
+
+      // 1. Try fetching directly via user's Apps Script Web App if available
+      if (appsScriptUrl && appsScriptUrl.trim() !== '') {
+        try {
+          // Fetch Kas Posbindu
+          const posbinduResponse = await fetch('/api/submit-keuangan-proxy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: appsScriptUrl.trim(),
+              payload: { action: 'read', jenisKas: 'Kas Posbindu' }
+            })
+          });
+          
+          if (posbinduResponse.ok) {
+            const resData = await posbinduResponse.json();
+            if (resData.status === 'success' && Array.isArray(resData.data)) {
+              posbinduRecords = resData.data.map((item: any, i: number) => ({
+                id: `g_sheet_finance_p_${i}_${Date.now()}`,
+                tanggal: item.tanggal,
+                keterangan: item.keterangan,
+                kategori: item.kategori,
+                jenisKas: 'Kas Posbindu',
+                jumlah: item.jumlah,
+                pj: item.pj || 'Kader'
+              }));
+              fetchedUsingAppsScript = true;
+            }
+          }
+
+          // Fetch Kas Cek Darah
+          const cekDarahResponse = await fetch('/api/submit-keuangan-proxy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: appsScriptUrl.trim(),
+              payload: { action: 'read', jenisKas: 'Kas Cek Darah' }
+            })
+          });
+
+          if (cekDarahResponse.ok) {
+            const resData = await cekDarahResponse.json();
+            if (resData.status === 'success' && Array.isArray(resData.data)) {
+              cekDarahRecords = resData.data.map((item: any, i: number) => ({
+                id: `g_sheet_finance_c_${i}_${Date.now()}`,
+                tanggal: item.tanggal,
+                keterangan: item.keterangan,
+                kategori: item.kategori,
+                jenisKas: 'Kas Cek Darah',
+                jumlah: item.jumlah,
+                pj: item.pj || 'Kader'
+              }));
+            }
+          }
+        } catch (asErr) {
+          console.warn('Failed to fetch via custom Apps Script read action, falling back to public CSV:', asErr);
+        }
+      }
+
+      // 2. Fallback to reading the public read-only Spreadsheet CSV
+      if (!fetchedUsingAppsScript) {
+        posbinduRecords = await fetchGoogleSheetKeuangan('/api/proxy-keuangan', 'Kas Posbindu');
+        cekDarahRecords = await fetchGoogleSheetKeuangan('/api/proxy-keuangan-cekdarah', 'Kas Cek Darah');
+      }
       
       const combinedRecords = [...posbinduRecords, ...cekDarahRecords];
       
@@ -90,7 +162,16 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
         const updatedList = [...keuanganList];
         let addedCount = 0;
         
+        // Load locally deleted transaction signatures to filter them out
+        const deletedSigs = JSON.parse(localStorage.getItem('posbindu_deleted_keuangan_signatures') || '[]');
+        
         combinedRecords.forEach(fetched => {
+          const sig = `${fetched.tanggal}_${fetched.keterangan.toLowerCase().trim()}_${fetched.kategori}_${fetched.jenisKas}_${fetched.jumlah}`;
+          if (deletedSigs.includes(sig)) {
+            // Skip importing records deleted locally
+            return;
+          }
+
           const isDuplicate = updatedList.some(local => 
             local.tanggal === fetched.tanggal &&
             local.keterangan.toLowerCase().trim() === fetched.keterangan.toLowerCase().trim() &&
@@ -336,7 +417,12 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
         });
 
         if (!response.ok) {
-          throw new Error('Gagal mengirim melalui proxy server');
+          let errorMsg = 'Gagal mengirim melalui proxy server';
+          try {
+            const errData = await response.json();
+            if (errData.error) errorMsg = errData.error;
+          } catch(e) {}
+          throw new Error(errorMsg);
         }
 
         const data = await response.json();
@@ -348,6 +434,13 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
       } catch (err: any) {
         console.error('Failed to submit to Google Sheets:', err);
         gSheetsStatusMessage = ' (tersimpan lokal, gagal kirim ke Google Sheets)';
+        
+        // If it's an invalid URL error, show a clear message
+        if (err.message && err.message.includes('Invalid Apps Script URL')) {
+          alert('GAGAL: URL Apps Script tidak valid atau tidak ditemukan (404).\n\nPastikan Anda menyalin URL Web App yang benar (berakhir dengan /exec). Silakan perbaiki URL pada pengaturan "Integrasi Google Sheets" di bawah.');
+        } else {
+          alert(`Gagal sinkronisasi ke GSheets: ${err.message}`);
+        }
       } finally {
         setIsSubmittingToGSheets(false);
       }
@@ -372,6 +465,20 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
 
   const handleManualDelete = (id: string, detail: string) => {
     if (window.confirm(`Apakah Anda yakin ingin menghapus catatan keuangan "${detail}"?`)) {
+      // Find the record being deleted to generate its signature
+      const recordToDelete = keuanganList.find(item => item.id === id);
+      if (recordToDelete) {
+        const sig = `${recordToDelete.tanggal}_${recordToDelete.keterangan.toLowerCase().trim()}_${recordToDelete.kategori}_${recordToDelete.jenisKas}_${recordToDelete.jumlah}`;
+        try {
+          const deletedSigs = JSON.parse(localStorage.getItem('posbindu_deleted_keuangan_signatures') || '[]');
+          if (!deletedSigs.includes(sig)) {
+            deletedSigs.push(sig);
+            localStorage.setItem('posbindu_deleted_keuangan_signatures', JSON.stringify(deletedSigs));
+          }
+        } catch (e) {
+          console.error('Error saving deleted signature:', e);
+        }
+      }
       onDeleteKeuangan(id);
       setNotificationMessage('Catatan transaksi berhasil dihapus.');
       setShowNotification(true);
@@ -386,6 +493,75 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
   try {
     var data = JSON.parse(e.postData.contents);
     
+    // Support reading records to sync back to the web application
+    if (data.action === "read") {
+      var sheetName = data.jenisKas || "Kas Posbindu";
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        var sheets = ss.getSheets();
+        if (sheetName === "Kas Cek Darah" && sheets.length > 1) {
+          sheet = sheets[1];
+        } else {
+          sheet = sheets[0];
+        }
+      }
+      
+      var values = sheet.getDataRange().getValues();
+      var records = [];
+      
+      if (values.length > 1) {
+        var headers = values[0].map(function(h) { return h.toString().toUpperCase().trim(); });
+        var idxTanggal = headers.indexOf("TANGGAL");
+        var idxUraian = headers.indexOf("URAIAN") !== -1 ? headers.indexOf("URAIAN") : headers.indexOf("KETERANGAN");
+        var idxPemasukan = headers.indexOf("PEMASUKAN");
+        var idxPengeluaran = headers.indexOf("PENGELUARAN");
+        
+        for (var i = 1; i < values.length; i++) {
+          var row = values[i];
+          var rawTanggal = row[idxTanggal !== -1 ? idxTanggal : 0];
+          var rawUraian = row[idxUraian !== -1 ? idxUraian : 1];
+          var rawPemasukan = row[idxPemasukan !== -1 ? idxPemasukan : 2];
+          var rawPengeluaran = row[idxPengeluaran !== -1 ? idxPengeluaran : 3];
+          
+          if (!rawTanggal && !rawUraian) continue;
+          
+          // Format Date to YYYY-MM-DD
+          var dateStr = "";
+          if (rawTanggal instanceof Date) {
+            var y = rawTanggal.getFullYear();
+            var m = ("0" + (rawTanggal.getMonth() + 1)).slice(-2);
+            var d = ("0" + rawTanggal.getDate()).slice(-2);
+            dateStr = y + "-" + m + "-" + d;
+          } else if (rawTanggal) {
+            var parts = rawTanggal.toString().split("/");
+            if (parts.length === 3) {
+              dateStr = parts[2] + "-" + parts[1].padStart(2, "0") + "-" + parts[0].padStart(2, "0");
+            } else {
+              dateStr = rawTanggal.toString();
+            }
+          }
+          
+          var valPemasukan = parseFloat(rawPemasukan) || 0;
+          var valPengeluaran = parseFloat(rawPengeluaran) || 0;
+          var kategori = valPengeluaran > 0 && valPemasukan === 0 ? "Pengeluaran" : "Pemasukan";
+          var jumlah = valPengeluaran > 0 && valPemasukan === 0 ? valPengeluaran : valPemasukan;
+          
+          records.push({
+            tanggal: dateStr,
+            keterangan: rawUraian.toString().trim() || "Transaksi Tanpa Keterangan",
+            kategori: kategori,
+            jenisKas: sheetName,
+            jumlah: jumlah,
+            pj: "Kader"
+          });
+        }
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", data: records }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // Normal append row (Save transaction)
     var rawTanggal = data.tanggal || ""; 
     var formattedDate = rawTanggal;
     var parts = rawTanggal.split('-');
@@ -479,7 +655,17 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
       {/* Header section with Tabs */}
       <div className="bg-[#FFC8DD] p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 tracking-tight">Laporan Keuangan</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight">Laporan Keuangan</h1>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 hover:bg-white/50 text-slate-700 hover:text-indigo-700 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-transparent hover:border-slate-300"
+              title="Pengaturan Sinkronisasi Google Sheets"
+              id="btn-open-gsheets-settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
           <p className="text-xs text-slate-500 mt-1">Pencatatan pemasukan, pengeluaran kas, saldo akhir keuangan operasional kader.</p>
         </div>
         
@@ -1025,6 +1211,260 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                   <span>Cetak Laporan</span>
                 </button>
               </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Google Sheets Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 bg-indigo-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cloud className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800">Integrasi & Sinkronisasi Google Sheets</h2>
+                  <p className="text-[10px] text-slate-500">Hubungkan tabel web ini dengan Google Spreadsheet pribadi Anda</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-xl transition-all cursor-pointer text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-600">
+              
+              {/* Sync Status / Manual Sync Trigger */}
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-slate-700">Status Sinkronisasi</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {lastSynced ? `Terakhir disinkronkan: ${lastSynced}` : 'Belum pernah disinkronkan.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleSyncGoogleSheet(false);
+                  }}
+                  disabled={isSyncing}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold rounded-lg flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
+                </button>
+              </div>
+
+              {/* URL Apps Script Input */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700">URL Google Apps Script Web App</label>
+                <input
+                  type="url"
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  value={appsScriptUrl}
+                  onChange={(e) => setAppsScriptUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-700 font-mono text-[11px] outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                />
+                <p className="text-[10px] text-slate-400">Pastikan URL berakhir dengan <code className="font-mono text-slate-600 bg-slate-100 px-1 rounded">/exec</code>. URL ini digunakan untuk menulis dan membaca data secara langsung dari spreadsheet Anda.</p>
+              </div>
+
+              {/* Auto Sync Toggle */}
+              <label className="flex items-start gap-2.5 p-3.5 border border-slate-150 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-all cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sendToGSheets}
+                  onChange={(e) => setSendToGSheets(e.target.checked)}
+                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer h-4 w-4"
+                />
+                <div>
+                  <span className="font-bold text-slate-700 block">Kirim Otomatis ke Google Sheets</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Setiap kali Anda menekan tombol "Simpan Transaksi", mutasi kas akan langsung dicatat secara real-time ke lembar kerja Google Sheets Anda.</span>
+                </div>
+              </label>
+
+              {/* Advanced: Clear deleted signatures */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-bold text-slate-700">Setel Ulang Riwayat Terhapus</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Hapus jejak penolakan data agar transaksi yang pernah dihapus di web dapat dimuat kembali saat sinkronisasi.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem('posbindu_deleted_keuangan_signatures');
+                    alert('Jejak penghapusan berhasil disetel ulang! Semua baris dari spreadsheet akan kembali dimuat saat tombol "Sinkronkan Sekarang" ditekan.');
+                  }}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold rounded-lg text-[10px] cursor-pointer transition-all"
+                >
+                  Setel Ulang
+                </button>
+              </div>
+
+              {/* Apps Script Guide Code */}
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <Code2 className="w-4 h-4 text-indigo-600" />
+                    Panduan & Kode Google Apps Script
+                  </span>
+                  <button
+                    onClick={() => setShowAppsScriptInstructions(!showAppsScriptInstructions)}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{showAppsScriptInstructions ? 'Sembunyikan' : 'Lihat Cara Pasang'}</span>
+                  </button>
+                </div>
+
+                {showAppsScriptInstructions && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 text-[11px] leading-relaxed animate-fade-in text-slate-700">
+                    <p className="font-bold text-indigo-700">Langkah Pemasangan di Google Spreadsheet:</p>
+                    <ol className="list-decimal pl-4 space-y-1.5">
+                      <li>Buka Google Spreadsheet Anda. Buat dua lembar kerja (Tab) dengan nama persis: <strong className="text-slate-900">"Kas Posbindu"</strong> dan <strong className="text-slate-900">"Kas Cek Darah"</strong>.</li>
+                      <li>Di menu atas spreadsheet, klik <strong className="text-slate-900">Ekstensi &gt; Apps Script</strong>.</li>
+                      <li>Hapus semua kode bawaan, lalu salin dan tempel kode lengkap di bawah ini.</li>
+                      <li>Klik ikon Simpan (disket) atau tekan <kbd className="bg-white border border-slate-300 px-1 rounded text-[9px] shadow-sm font-mono">Ctrl+S</kbd>.</li>
+                      <li>Klik tombol <strong className="text-slate-900">Terapkan &gt; Penerapan Baru (Deploy &gt; New Deployment)</strong>.</li>
+                      <li>Pilih jenis penerapan: <strong className="text-slate-900">Aplikasi Web (Web App)</strong>.</li>
+                      <li>Konfigurasi: 
+                        <ul className="list-disc pl-4 mt-1 space-y-1">
+                          <li>Jalankan sebagai: <strong className="text-slate-900">Saya sendiri (Your Email)</strong></li>
+                          <li>Siapa yang memiliki akses: <strong className="text-slate-900">Siapa saja (Anyone)</strong> (Penting agar web dapat mengaksesnya)</li>
+                        </ul>
+                      </li>
+                      <li>Klik <strong className="text-slate-900">Terapkan</strong>, berikan izin akses akun Google Anda jika diminta.</li>
+                      <li>Salin <strong className="text-slate-900 font-mono">URL Aplikasi Web</strong> yang dihasilkan (berakhir dengan <code className="font-semibold text-indigo-600">/exec</code>) dan tempel di kotak isian di atas!</li>
+                    </ol>
+
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center bg-slate-200/60 p-1.5 rounded-t-lg px-3">
+                        <span className="font-mono font-bold text-[10px] text-slate-600">Kode Apps Script Lengkap (Baca & Tulis)</span>
+                        <button
+                          onClick={handleCopyScript}
+                          className="px-2 py-1 bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-300 hover:border-indigo-300 font-bold rounded text-[9px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                        >
+                          {isCopied ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span>Tersalin!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Salin Kode</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <pre className="bg-slate-900 text-slate-200 p-3 rounded-b-lg overflow-x-auto text-[9px] font-mono leading-normal max-h-48 scrollbar-thin">
+                        {`function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.action === "read") {
+      var sheetName = data.jenisKas || "Kas Posbindu";
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        var sheets = ss.getSheets();
+        sheet = (sheetName === "Kas Cek Darah" && sheets.length > 1) ? sheets[1] : sheets[0];
+      }
+      var values = sheet.getDataRange().getValues();
+      var records = [];
+      if (values.length > 1) {
+        var headers = values[0].map(function(h) { return h.toString().toUpperCase().trim(); });
+        var idxTanggal = headers.indexOf("TANGGAL");
+        var idxUraian = headers.indexOf("URAIAN") !== -1 ? headers.indexOf("URAIAN") : headers.indexOf("KETERANGAN");
+        var idxPemasukan = headers.indexOf("PEMASUKAN");
+        var idxPengeluaran = headers.indexOf("PENGELUARAN");
+        for (var i = 1; i < values.length; i++) {
+          var row = values[i];
+          var rawTanggal = row[idxTanggal !== -1 ? idxTanggal : 0];
+          var rawUraian = row[idxUraian !== -1 ? idxUraian : 1];
+          var rawPemasukan = row[idxPemasukan !== -1 ? idxPemasukan : 2];
+          var rawPengeluaran = row[idxPengeluaran !== -1 ? idxPengeluaran : 3];
+          if (!rawTanggal && !rawUraian) continue;
+          var dateStr = "";
+          if (rawTanggal instanceof Date) {
+            var y = rawTanggal.getFullYear();
+            var m = ("0" + (rawTanggal.getMonth() + 1)).slice(-2);
+            var d = ("0" + rawTanggal.getDate()).slice(-2);
+            dateStr = y + "-" + m + "-" + d;
+          } else if (rawTanggal) {
+            var parts = rawTanggal.toString().split("/");
+            if (parts.length === 3) {
+              dateStr = parts[2] + "-" + parts[1].padStart(2, "0") + "-" + parts[0].padStart(2, "0");
+            } else {
+              dateStr = rawTanggal.toString();
+            }
+          }
+          var valPemasukan = parseFloat(rawPemasukan) || 0;
+          var valPengeluaran = parseFloat(rawPengeluaran) || 0;
+          var kategori = valPengeluaran > 0 && valPemasukan === 0 ? "Pengeluaran" : "Pemasukan";
+          var jumlah = valPengeluaran > 0 && valPemasukan === 0 ? valPengeluaran : valPemasukan;
+          records.push({
+            tanggal: dateStr,
+            keterangan: rawUraian.toString().trim() || "Transaksi Tanpa Keterangan",
+            kategori: kategori,
+            jenisKas: sheetName,
+            jumlah: jumlah,
+            pj: "Kader"
+          });
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", data: records }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+    // Append row
+    var rawTanggal = data.tanggal || ""; 
+    var formattedDate = rawTanggal;
+    var parts = rawTanggal.split('-');
+    if (parts.length === 3) {
+      formattedDate = parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+    var uraian = data.keterangan || "";
+    var kategori = data.kategori || "Pemasukan";
+    var jenisKas = data.jenisKas || "Kas Posbindu";
+    var jumlah = parseFloat(data.jumlah) || 0;
+    var sheetName = (jenisKas.toLowerCase().indexOf("cek") !== -1 || jenisKas.toLowerCase().indexOf("darah") !== -1) ? "Kas Cek Darah" : "Kas Posbindu";
+    var sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      var sheets = ss.getSheets();
+      sheet = (sheetName === "Kas Cek Darah" && sheets.length > 1) ? sheets[1] : sheets[0];
+    }
+    var pemasukan = kategori === "Pemasukan" ? jumlah : "";
+    var pengeluaran = kategori === "Pengeluaran" ? jumlah : "";
+    sheet.appendRow([formattedDate, uraian, pemasukan, pengeluaran]);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Transaksi berhasil disimpan ke " + sheet.getName() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  } catch(error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer transition-all shadow-md"
+              >
+                Simpan & Tutup
+              </button>
             </div>
 
           </div>

@@ -101,6 +101,11 @@ async function startServer() {
 
       const text = await response.text();
       console.log("Apps Script response:", text);
+      
+      if (text.trim().startsWith("<!DOCTYPE html>")) {
+        return res.status(400).json({ error: "Invalid Apps Script URL. Pastikan Anda menggunakan URL Web App Apps Script (berakhir dengan /exec), BUKAN URL Spreadsheet/CSV." });
+      }
+
       res.json({ success: true, responseText: text });
     } catch (err: any) {
       console.error("Proxy submit keuangan failed:", err);

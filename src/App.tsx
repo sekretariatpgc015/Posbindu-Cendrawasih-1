@@ -16,11 +16,11 @@ const GOOGLE_SHEET_CSV_URL = '/api/proxy-warga';
 
 export default function App() {
   // One-time clear of stale localStorage mock data so user starts with a clean slate
-  if (typeof window !== 'undefined' && !localStorage.getItem('posbindu_cleared_dummy_v5')) {
+  if (typeof window !== 'undefined' && !localStorage.getItem('posbindu_cleared_dummy_force_v10')) {
     localStorage.removeItem('posbindu_warga');
     localStorage.removeItem('posbindu_kunjungan');
     localStorage.removeItem('posbindu_keuangan');
-    localStorage.setItem('posbindu_cleared_dummy_v5', 'true');
+    localStorage.setItem('posbindu_cleared_dummy_force_v10', 'true');
   }
 
   // 1. Initialize states from localStorage or mock data
