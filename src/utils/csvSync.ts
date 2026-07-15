@@ -1,4 +1,4 @@
-import { Warga, Kunjungan } from '../types';
+import { Warga, Kunjungan, KeuanganRecord } from '../types';
 
 /**
  * Standard self-contained CSV parser that correctly handles quoted values,
@@ -271,4 +271,155 @@ export async function fetchGoogleSheetKunjungan(url: string): Promise<Kunjungan[
   }
   
   return parsedKunjunganList;
+}
+
+const DIRECT_KEUANGAN_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4ogCEXTgnL-4hBAv5RRaHptZtZ9mQAolKiXsp6TTDzx-PRuF7W3aSqAwzvOH3LXiTYbH-E4q74eP4/pub?gid=0&single=true&output=csv';
+const DIRECT_KEUANGAN_CEK_DARAH_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4ogCEXTgnL-4hBAv5RRaHptZtZ9mQAolKiXsp6TTDzx-PRuF7W3aSqAwzvOH3LXiTYbH-E4q74eP4/pub?gid=878787721&single=true&output=csv';
+
+/**
+ * Fetches and parses financial (keuangan) data from Google Sheets CSV URL with fallback
+ */
+export async function fetchGoogleSheetKeuangan(
+  url: string,
+  defaultJenisKas: 'Kas Posbindu' | 'Kas Cek Darah' = 'Kas Posbindu'
+): Promise<KeuanganRecord[]> {
+  let csvText = '';
+  const fallbackUrl = defaultJenisKas === 'Kas Cek Darah' ? DIRECT_KEUANGAN_CEK_DARAH_URL : DIRECT_KEUANGAN_URL;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    csvText = await response.text();
+  } catch (proxyError) {
+    console.warn('Failed to fetch via proxy, trying direct Google Sheet request for keuangan:', proxyError);
+    try {
+      const directResponse = await fetch(fallbackUrl);
+      if (!directResponse.ok) {
+        throw new Error(`HTTP error from direct sheets! status: ${directResponse.status}`);
+      }
+      csvText = await directResponse.text();
+    } catch (directError: any) {
+      console.error('Both proxy and direct Google Sheet fetch failed for keuangan:', directError);
+      throw new Error(`Gagal memuat data keuangan: ${directError.message || directError}`);
+    }
+  }
+  
+  if (!csvText || csvText.trim() === '') {
+    return [];
+  }
+  
+  const rows = parseCSV(csvText);
+  
+  if (rows.length < 2) {
+    return [];
+  }
+  
+  const header = rows[0].map(h => h.toUpperCase().trim());
+  const idxTanggal = header.indexOf('TANGGAL');
+  const idxKeterangan = header.indexOf('KETERANGAN');
+  const idxKategori = header.indexOf('KATEGORI');
+  const idxJenisKas = header.indexOf('JENIS KAS');
+  const idxJumlah = header.indexOf('JUMLAH');
+  const idxPj = header.indexOf('PJ');
+  
+  const idxPemasukan = header.indexOf('PEMASUKAN');
+  const idxPengeluaran = header.indexOf('PENGELUARAN');
+  const idxUraian = header.indexOf('URAIAN') !== -1 ? header.indexOf('URAIAN') : idxKeterangan;
+  
+  // Check if spreadsheet is in 4-column format [TANGGAL, URAIAN, PEMASUKAN, PENGELUARAN]
+  const isFourColumnLayout = idxPemasukan !== -1 || idxPengeluaran !== -1;
+
+  const parsedKeuanganList: KeuanganRecord[] = [];
+  
+  const parseNumber = (val: string): number => {
+    if (!val) return 0;
+    const cleaned = val.replace(/"/g, '').replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '').trim();
+    return parseFloat(cleaned) || 0;
+  };
+
+  if (isFourColumnLayout) {
+    const actualTanggalIdx = idxTanggal !== -1 ? idxTanggal : 0;
+    const actualUraianIdx = idxUraian !== -1 ? idxUraian : 1;
+    const actualPemasukanIdx = idxPemasukan !== -1 ? idxPemasukan : 2;
+    const actualPengeluaranIdx = idxPengeluaran !== -1 ? idxPengeluaran : 3;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length < 2) continue;
+      
+      const rawTanggal = row[actualTanggalIdx] || '';
+      const rawUraian = row[actualUraianIdx] || '';
+      const rawPemasukan = row[actualPemasukanIdx] || '';
+      const rawPengeluaran = row[actualPengeluaranIdx] || '';
+      
+      if (!rawTanggal && !rawUraian) continue;
+
+      const visitDate = parseDateToYYYYMMDD(rawTanggal);
+      const valPemasukan = parseNumber(rawPemasukan);
+      const valPengeluaran = parseNumber(rawPengeluaran);
+      
+      // Determine if it is income or expense
+      const kategoriValue: 'Pemasukan' | 'Pengeluaran' = valPengeluaran > 0 && valPemasukan === 0 ? 'Pengeluaran' : 'Pemasukan';
+      const jumlahValue = valPengeluaran > 0 && valPemasukan === 0 ? valPengeluaran : valPemasukan;
+
+      parsedKeuanganList.push({
+        id: `g_sheet_finance_${i}_${Date.now()}`,
+        tanggal: visitDate || '2026-07-04',
+        keterangan: rawUraian.trim() || 'Transaksi Tanpa Keterangan',
+        kategori: kategoriValue,
+        jenisKas: defaultJenisKas,
+        jumlah: jumlahValue,
+        pj: 'Kader'
+      });
+    }
+  } else {
+    // Alternative headers
+    const idxNominal = idxJumlah !== -1 ? idxJumlah : header.indexOf('NOMINAL');
+    const idxPenanggungJawab = idxPj !== -1 ? idxPj : header.indexOf('PENANGGUNG JAWAB');
+    
+    // Fallbacks or errors
+    const actualTanggalIdx = idxTanggal !== -1 ? idxTanggal : 0;
+    const actualKeteranganIdx = idxUraian !== -1 ? idxUraian : 1;
+    const actualKategoriIdx = idxKategori !== -1 ? idxKategori : 2;
+    const actualJenisKasIdx = idxJenisKas !== -1 ? idxJenisKas : 3;
+    const actualJumlahIdx = idxNominal !== -1 ? idxNominal : 4;
+    const actualPjIdx = idxPenanggungJawab !== -1 ? idxPj : 5;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length < 2) continue; // Skip empty rows
+      
+      const rawTanggal = row[actualTanggalIdx] || '';
+      const rawKeterangan = row[actualKeteranganIdx] || '';
+      const rawKategori = row[actualKategoriIdx] || 'Pemasukan';
+      const rawJenisKas = row[actualJenisKasIdx] || '';
+      const rawJumlah = row[actualJumlahIdx] || '0';
+      const rawPj = row[actualPjIdx] || '';
+      
+      if (!rawTanggal && !rawKeterangan) continue; // Skip rows that are empty
+      
+      const visitDate = parseDateToYYYYMMDD(rawTanggal);
+      const kategoriValue: 'Pemasukan' | 'Pengeluaran' = rawKategori.trim().toLowerCase().includes('keluar') ? 'Pengeluaran' : 'Pemasukan';
+      
+      let jenisKasValue: 'Kas Posbindu' | 'Kas Cek Darah' = defaultJenisKas;
+      if (idxJenisKas !== -1 && rawJenisKas) {
+        jenisKasValue = rawJenisKas.trim().toLowerCase().includes('cek') ? 'Kas Cek Darah' : 'Kas Posbindu';
+      }
+      
+      const jumlahValue = parseNumber(rawJumlah);
+      
+      parsedKeuanganList.push({
+        id: `g_sheet_finance_${i}_${Date.now()}`,
+        tanggal: visitDate || '2026-07-04',
+        keterangan: rawKeterangan.trim() || 'Transaksi Tanpa Keterangan',
+        kategori: kategoriValue,
+        jenisKas: jenisKasValue,
+        jumlah: jumlahValue,
+        pj: rawPj.trim() || 'Kader'
+      });
+    }
+  }
+  
+  return parsedKeuanganList;
 }

@@ -54,6 +54,60 @@ async function startServer() {
     }
   });
 
+  // Proxy Google Sheet Keuangan (Finance) to bypass CORS and iframe sandbox restrictions
+  app.get("/api/proxy-keuangan", async (req, res) => {
+    try {
+      const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4ogCEXTgnL-4hBAv5RRaHptZtZ9mQAolKiXsp6TTDzx-PRuF7W3aSqAwzvOH3LXiTYbH-E4q74eP4/pub?gid=0&single=true&output=csv';
+      const text = await fetchCsvFromSheets(url);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.send(text);
+    } catch (err: any) {
+      console.error("Proxy keuangan failed:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch keuangan from Google Sheets" });
+    }
+  });
+
+  // Proxy Google Sheet Keuangan - Kas Cek Darah to bypass CORS and iframe sandbox restrictions
+  app.get("/api/proxy-keuangan-cekdarah", async (req, res) => {
+    try {
+      const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4ogCEXTgnL-4hBAv5RRaHptZtZ9mQAolKiXsp6TTDzx-PRuF7W3aSqAwzvOH3LXiTYbH-E4q74eP4/pub?gid=878787721&single=true&output=csv';
+      const text = await fetchCsvFromSheets(url);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.send(text);
+    } catch (err: any) {
+      console.error("Proxy keuangan cek darah failed:", err);
+      res.status(500).json({ error: err.message || "Failed to fetch keuangan cek darah from Google Sheets" });
+    }
+  });
+
+  // Proxy Google Sheets Form submission to bypass CORS and iframe sandboxing
+  app.post("/api/submit-keuangan-proxy", express.json(), async (req, res) => {
+    try {
+      const { url, payload } = req.body;
+      if (!url) {
+        return res.status(400).json({ error: "Missing Apps Script URL" });
+      }
+
+      console.log(`Forwarding transaction to Apps Script URL: ${url}`);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await response.text();
+      console.log("Apps Script response:", text);
+      res.json({ success: true, responseText: text });
+    } catch (err: any) {
+      console.error("Proxy submit keuangan failed:", err);
+      res.status(500).json({ error: err.message || "Failed to proxy transaction submission to Google Sheets" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

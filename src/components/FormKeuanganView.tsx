@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Coins, Wallet, TrendingUp, TrendingDown, Save, Plus, Trash2, 
-  Search, Printer, Info, CheckCircle 
+  Search, Printer, Info, CheckCircle, RefreshCw, Cloud, ArrowDownToLine, ArrowUpFromLine,
+  Copy, Check, ExternalLink, Code2, Settings
 } from 'lucide-react';
 import { KeuanganRecord } from '../types';
+import { fetchGoogleSheetKeuangan } from '../utils/csvSync';
 
 const INDONESIAN_MONTHS = [
   { value: 'all', label: 'Semua Bulan' },
@@ -25,9 +27,10 @@ interface FormKeuanganViewProps {
   keuanganList: KeuanganRecord[];
   onSaveKeuangan: (newRecord: KeuanganRecord) => void;
   onDeleteKeuangan: (id: string) => void;
+  onBulkSaveKeuangan: (newList: KeuanganRecord[]) => void;
 }
 
-export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDeleteKeuangan }: FormKeuanganViewProps) {
+export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDeleteKeuangan, onBulkSaveKeuangan }: FormKeuanganViewProps) {
   // Form State
   const [tanggal, setTanggal] = useState<string>('2026-07-04');
   const [keterangan, setKeterangan] = useState<string>('');
@@ -41,6 +44,150 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
   const [showNotification, setShowNotification] = useState<boolean>(false);
   const [notificationMessage, setNotificationMessage] = useState<string>('');
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
+
+  // Google Apps Script Integration State
+  const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
+    return localStorage.getItem('posbindu_apps_script_url') || 'https://script.google.com/macros/s/AKfycbyD7I2_4U0mU9zX-YF878787721_example/exec';
+  });
+  const [sendToGSheets, setSendToGSheets] = useState<boolean>(() => {
+    const stored = localStorage.getItem('posbindu_send_to_gsheets');
+    return stored !== null ? stored === 'true' : true;
+  });
+  const [isSubmittingToGSheets, setIsSubmittingToGSheets] = useState<boolean>(false);
+  const [showAppsScriptInstructions, setShowAppsScriptInstructions] = useState<boolean>(false);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem('posbindu_apps_script_url', appsScriptUrl);
+  }, [appsScriptUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('posbindu_send_to_gsheets', sendToGSheets ? 'true' : 'false');
+  }, [sendToGSheets]);
+
+  // Sync State
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<string | null>(() => {
+    return localStorage.getItem('posbindu_keuangan_last_synced') || null;
+  });
+
+  // Sync GSheets handler for both Kas Posbindu and Kas Cek Darah
+  const handleSyncGoogleSheet = async (silent = false) => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      // 1. Fetch Kas Posbindu
+      const posbinduRecords = await fetchGoogleSheetKeuangan('/api/proxy-keuangan', 'Kas Posbindu');
+      
+      // 2. Fetch Kas Cek Darah
+      const cekDarahRecords = await fetchGoogleSheetKeuangan('/api/proxy-keuangan-cekdarah', 'Kas Cek Darah');
+      
+      const combinedRecords = [...posbinduRecords, ...cekDarahRecords];
+      
+      if (combinedRecords.length > 0) {
+        const updatedList = [...keuanganList];
+        let addedCount = 0;
+        
+        combinedRecords.forEach(fetched => {
+          const isDuplicate = updatedList.some(local => 
+            local.tanggal === fetched.tanggal &&
+            local.keterangan.toLowerCase().trim() === fetched.keterangan.toLowerCase().trim() &&
+            local.kategori === fetched.kategori &&
+            local.jenisKas === fetched.jenisKas &&
+            local.jumlah === fetched.jumlah
+          );
+          
+          if (!isDuplicate) {
+            updatedList.push(fetched);
+            addedCount++;
+          }
+        });
+        
+        onBulkSaveKeuangan(updatedList);
+        
+        const now = new Date().toLocaleString('id-ID', {
+          dateStyle: 'medium',
+          timeStyle: 'short'
+        });
+        setLastSynced(now);
+        localStorage.setItem('posbindu_keuangan_last_synced', now);
+        
+        if (!silent) {
+          setNotificationMessage(`Sinkronisasi Berhasil! ${combinedRecords.length} transaksi dimuat (${addedCount} transaksi baru).`);
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 5000);
+        }
+      } else {
+        if (!silent) {
+          setNotificationMessage('Lembar kerja Google Sheets kosong atau tidak memiliki data transaksi valid.');
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 5000);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to sync keuangan from Google Sheets:', err);
+      if (!silent) {
+        setSyncError(err.message || 'Gagal menyinkronkan data keuangan dari Google Sheets.');
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Auto-sync on component mount and on tab changes
+  useEffect(() => {
+    handleSyncGoogleSheet(true);
+  }, [jenisKasFilter]);
+
+  // Export cash ledger to CSV
+  const handleExportCSV = () => {
+    // Filter transactions by the active jenisKasFilter (e.g., Kas Posbindu)
+    const activeList = keuanganList.filter(f => f.jenisKas === jenisKasFilter);
+    if (activeList.length === 0) {
+      alert('Tidak ada data transaksi untuk diekspor.');
+      return;
+    }
+    
+    // Sort chronologically ascending for the export
+    const sorted = [...activeList].sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime());
+    
+    // Generate CSV Content with exactly the requested columns: TANGGAL, URAIAN, PEMASUKAN, PENGELUARAN
+    const csvRows = [
+      ['TANGGAL', 'URAIAN', 'PEMASUKAN', 'PENGELUARAN'].join(','),
+      ...sorted.map((item) => {
+        const escapedDesc = `"${item.keterangan.replace(/"/g, '""')}"`;
+        const formattedDate = item.tanggal.split('-').reverse().join('/'); // DD/MM/YYYY
+        
+        const isIncome = item.kategori === 'Pemasukan';
+        const pemasukanValue = isIncome ? item.jumlah : '';
+        const pengeluaranValue = !isIncome ? item.jumlah : '';
+        
+        return [
+          formattedDate,
+          escapedDesc,
+          pemasukanValue,
+          pengeluaranValue
+        ].join(',');
+      })
+    ];
+    
+    // Create download link
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `LaporanKeuangan-${jenisKasFilter.replace(/\s+/g, '')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setNotificationMessage(`Ekspor berhasil! File LaporanKeuangan-${jenisKasFilter.replace(/\s+/g, '')}.csv telah diunduh.`);
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 4000);
+  };
+
 
   // Currency Formatter
   const formatRupiah = (num: number) => {
@@ -147,33 +294,80 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
   }, [ledgerWithRunningBalance, monthFilter, searchTerm]);
 
   // Handle submit form
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!tanggal) { alert('Harap isi tanggal.'); return; }
     if (!keterangan) { alert('Harap isi keterangan.'); return; }
     if (!jumlah || parseFloat(jumlah) <= 0) { alert('Harap isi jumlah uang yang valid.'); return; }
 
+    const nominalValue = parseFloat(jumlah);
     const newRecord: KeuanganRecord = {
       id: `f-${Date.now()}`,
       tanggal,
       keterangan,
       kategori,
       jenisKas: jenisKasFilter,
-      jumlah: parseFloat(jumlah),
-      pj: ''
+      jumlah: nominalValue,
+      pj: 'Kader'
     };
+
+    let gSheetsStatusMessage = '';
+    
+    if (sendToGSheets && appsScriptUrl.trim() !== '') {
+      setIsSubmittingToGSheets(true);
+      try {
+        const response = await fetch('/api/submit-keuangan-proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: appsScriptUrl.trim(),
+            payload: {
+              tanggal: newRecord.tanggal,
+              keterangan: newRecord.keterangan,
+              kategori: newRecord.kategori,
+              jenisKas: newRecord.jenisKas,
+              jumlah: newRecord.jumlah,
+              pj: newRecord.pj
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Gagal mengirim melalui proxy server');
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          gSheetsStatusMessage = ' dan berhasil disinkronkan ke Google Sheets';
+        } else {
+          throw new Error(data.error || 'Respon gagal dari proxy');
+        }
+      } catch (err: any) {
+        console.error('Failed to submit to Google Sheets:', err);
+        gSheetsStatusMessage = ' (tersimpan lokal, gagal kirim ke Google Sheets)';
+      } finally {
+        setIsSubmittingToGSheets(false);
+      }
+    }
 
     onSaveKeuangan(newRecord);
 
     // Success notify
-    setNotificationMessage(`Berhasil mencatat ${kategori} sebesar ${formatRupiah(parseFloat(jumlah))}!`);
+    setNotificationMessage(`Berhasil mencatat ${kategori} sebesar ${formatRupiah(nominalValue)}${gSheetsStatusMessage}!`);
     setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 3000);
+    setTimeout(() => setShowNotification(false), 5000);
 
     // Reset Form
     setKeterangan('');
     setJumlah('');
+
+    // Trigger auto background sync after save to fetch updated records from Google Sheets
+    setTimeout(() => {
+      handleSyncGoogleSheet(true);
+    }, 1500);
   };
 
   const handleManualDelete = (id: string, detail: string) => {
@@ -183,6 +377,63 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 2000);
     }
+  };
+
+  const handleCopyScript = () => {
+    const scriptText = `function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  try {
+    var data = JSON.parse(e.postData.contents);
+    
+    var rawTanggal = data.tanggal || ""; 
+    var formattedDate = rawTanggal;
+    var parts = rawTanggal.split('-');
+    if (parts.length === 3) {
+      formattedDate = parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+    
+    var uraian = data.keterangan || "";
+    var kategori = data.kategori || "Pemasukan";
+    var jenisKas = data.jenisKas || "Kas Posbindu";
+    var jumlah = parseFloat(data.jumlah) || 0;
+    
+    var sheetName = "Kas Posbindu";
+    if (jenisKas.toLowerCase().indexOf("cek") !== -1 || jenisKas.toLowerCase().indexOf("darah") !== -1) {
+      sheetName = "Kas Cek Darah";
+    }
+    
+    var sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      var sheets = ss.getSheets();
+      if (sheetName === "Kas Cek Darah" && sheets.length > 1) {
+        sheet = sheets[1];
+      } else {
+        sheet = sheets[0];
+      }
+    }
+    
+    var pemasukan = "";
+    var pengeluaran = "";
+    
+    if (kategori.toLowerCase().indexOf("keluar") !== -1) {
+      pengeluaran = jumlah;
+    } else {
+      pemasukan = jumlah;
+    }
+    
+    sheet.appendRow([formattedDate, uraian, pemasukan, pengeluaran]);
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Transaksi berhasil disimpan ke " + sheet.getName() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  } catch(error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+    navigator.clipboard.writeText(scriptText);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 3000);
   };
 
   return (
@@ -294,6 +545,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
         </div>
       </div>
 
+
       {/* Feedback banner */}
       {showNotification && (
         <div id="keuangan-notification" className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fade-in print:hidden">
@@ -387,12 +639,19 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
             <button
               type="submit"
               id="btn-save-keuangan"
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-1.5 shadow-md transition-all hover:scale-[1.01] cursor-pointer"
+              disabled={isSubmittingToGSheets}
+              className={`w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex justify-center items-center gap-1.5 shadow-md transition-all hover:scale-[1.01] cursor-pointer ${isSubmittingToGSheets ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              <Save className="w-4 h-4" />
-              Simpan Transaksi
+              {isSubmittingToGSheets ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>{isSubmittingToGSheets ? 'Mengirim ke GSheets...' : 'Simpan Transaksi'}</span>
             </button>
           </form>
+
+
         </div>
 
         {/* Right Side: Ledger Table */}
@@ -401,7 +660,14 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4 mb-4 print:mb-2">
               <div>
                 <h2 className="text-sm font-bold text-slate-800">Buku {jenisKasFilter === 'Kas Posbindu' ? 'Kas Operasional Posbindu' : 'Kas Operasional Cek Darah'}</h2>
-                <p className="text-[11px] text-slate-400 print:hidden">Daftar arus kas masuk dan keluar secara terperinci.</p>
+                <p className="text-[11px] text-slate-400 print:hidden">
+                  Daftar arus kas masuk dan keluar secara terperinci.
+                  {lastSynced && (
+                    <span className="text-emerald-600 font-semibold ml-1">
+                      (Sinkron: {lastSynced})
+                    </span>
+                  )}
+                </p>
               </div>
 
               {/* Controls */}
@@ -432,6 +698,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                     </option>
                   ))}
                 </select>
+
 
                 {/* Print PDF (Show Preview First) */}
                 <button
