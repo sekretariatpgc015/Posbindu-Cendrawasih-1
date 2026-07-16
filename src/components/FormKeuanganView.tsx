@@ -44,6 +44,14 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
   const [showNotification, setShowNotification] = useState<boolean>(false);
   const [notificationMessage, setNotificationMessage] = useState<string>('');
   const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const rowsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, monthFilter, jenisKasFilter]);
 
   // Google Apps Script Integration State
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
@@ -310,23 +318,43 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
   const financialSummary = useMemo(() => {
     const listToSummarize = keuanganList.filter(f => f.jenisKas === jenisKasFilter);
 
-    const totalPemasukan = listToSummarize
-      .filter(f => f.kategori === 'Pemasukan')
-      .reduce((sum, item) => sum + item.jumlah, 0);
+    let totalPemasukan = 0;
+    let totalPengeluaran = 0;
+    let saldoBulanLalu = 0;
 
-    const totalPengeluaran = listToSummarize
-      .filter(f => f.kategori === 'Pengeluaran')
-      .reduce((sum, item) => sum + item.jumlah, 0);
+    if (monthFilter !== 'all') {
+      listToSummarize.forEach(item => {
+        const itemMonth = item.tanggal.split('-')[1]; // YYYY-MM-DD
+        if (itemMonth < monthFilter) {
+          if (item.kategori === 'Pemasukan') saldoBulanLalu += item.jumlah;
+          else saldoBulanLalu -= item.jumlah;
+        } else if (itemMonth === monthFilter) {
+          if (item.kategori === 'Pemasukan') totalPemasukan += item.jumlah;
+          else totalPengeluaran += item.jumlah;
+        }
+      });
+    } else {
+      totalPemasukan = listToSummarize
+        .filter(f => f.kategori === 'Pemasukan')
+        .reduce((sum, item) => sum + item.jumlah, 0);
 
-    const saldo = totalPemasukan - totalPengeluaran;
+      totalPengeluaran = listToSummarize
+        .filter(f => f.kategori === 'Pengeluaran')
+        .reduce((sum, item) => sum + item.jumlah, 0);
+    }
+
+    const saldo = monthFilter !== 'all' 
+      ? saldoBulanLalu + totalPemasukan - totalPengeluaran
+      : totalPemasukan - totalPengeluaran;
 
     return { 
       totalPemasukan, 
       totalPengeluaran, 
       saldo,
+      saldoBulanLalu,
       label: `Saldo ${jenisKasFilter}`
     };
-  }, [keuanganList, jenisKasFilter]);
+  }, [keuanganList, jenisKasFilter, monthFilter]);
 
   // Calculate running balance per record BEFORE filtering
   const ledgerWithRunningBalance = useMemo(() => {
@@ -686,7 +714,44 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
       </div>
 
       {/* Financial Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5" id="keuangan-summary">
+      <div className={`grid grid-cols-1 gap-5 ${monthFilter !== 'all' ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`} id="keuangan-summary">
+        {monthFilter !== 'all' && (
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between print:border-slate-200 print:shadow-none">
+            <div className="space-y-1">
+              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Saldo Bulan Lalu</span>
+              <span className="text-xl font-extrabold text-slate-800 block">{formatRupiah(financialSummary.saldoBulanLalu)}</span>
+              <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mt-1 print:text-slate-600">
+                Sisa kas bulan sebelumnya
+              </span>
+            </div>
+            <div className="p-3 bg-slate-50 text-slate-500 rounded-2xl print:hidden">
+              <Wallet className="w-6 h-6" />
+            </div>
+          </div>
+        )}
+
+        {/* Pemasukan */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between print:border-slate-200 print:shadow-none">
+          <div className="space-y-1">
+            <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pemasukan</span>
+            <span className="text-xl font-extrabold text-slate-800 block">{formatRupiah(financialSummary.totalPemasukan)}</span>
+          </div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl print:hidden">
+            <TrendingUp className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Pengeluaran */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between print:border-slate-200 print:shadow-none">
+          <div className="space-y-1">
+            <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pengeluaran</span>
+            <span className="text-xl font-extrabold text-slate-800 block">{formatRupiah(financialSummary.totalPengeluaran)}</span>
+          </div>
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl print:hidden">
+            <TrendingDown className="w-6 h-6" />
+          </div>
+        </div>
+
         {/* Saldo Akhir */}
         <div className="bg-gradient-to-tr from-indigo-600 to-violet-500 text-white p-6 rounded-2xl shadow-md relative overflow-hidden print:bg-none print:bg-slate-50 print:text-slate-800 print:border print:border-slate-200 print:shadow-none">
           <div className="absolute right-3 -bottom-3 opacity-15 print:hidden">
@@ -700,34 +765,6 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
           </div>
           <span className="text-3xl font-bold block mt-3 tracking-tight">{formatRupiah(financialSummary.saldo)}</span>
           <p className="text-[10px] text-indigo-100/80 mt-2 print:text-slate-400">Akumulasi sisa kas operasional siap digunakan.</p>
-        </div>
-
-        {/* Pemasukan */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between print:border-slate-200 print:shadow-none">
-          <div className="space-y-1">
-            <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pemasukan</span>
-            <span className="text-xl font-extrabold text-slate-800 block">{formatRupiah(financialSummary.totalPemasukan)}</span>
-            <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-1 print:text-emerald-700">
-              <TrendingUp className="w-3.5 h-3.5" /> Dana Swadaya / Puskesmas
-            </span>
-          </div>
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl print:hidden">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Pengeluaran */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between print:border-slate-200 print:shadow-none">
-          <div className="space-y-1">
-            <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Pengeluaran</span>
-            <span className="text-xl font-extrabold text-slate-800 block">{formatRupiah(financialSummary.totalPengeluaran)}</span>
-            <span className="text-[10px] text-rose-600 font-semibold flex items-center gap-1 mt-1 print:text-rose-700">
-              <TrendingDown className="w-3.5 h-3.5" /> Konsumsi & Reagen Alat Tes
-            </span>
-          </div>
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl print:hidden">
-            <TrendingDown className="w-6 h-6" />
-          </div>
         </div>
       </div>
 
@@ -919,36 +956,140 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                       </td>
                     </tr>
                   ) : (
-                    filteredLedger.map((item) => {
-                      const isIncome = item.kategori === 'Pemasukan';
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition-all">
-                          <td className="py-3 px-4 whitespace-nowrap">{item.tanggal.split('-').reverse().join('/')}</td>
-                          <td className="py-3 px-4 font-medium text-slate-800 break-words max-w-[240px]" title={item.keterangan}>
-                            {item.keterangan}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-emerald-600">
-                            {isIncome ? formatRupiah(item.jumlah) : <span className="text-slate-300 font-normal">-</span>}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-rose-600">
-                            {!isIncome ? formatRupiah(item.jumlah) : <span className="text-slate-300 font-normal">-</span>}
-                          </td>
-                          <td className="py-3 px-4 text-center print:hidden">
-                            <button
-                              onClick={() => handleManualDelete(item.id, item.keterangan)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-all cursor-pointer"
-                              title="Hapus transaksi"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    (() => {
+                      const startIndex = (currentPage - 1) * rowsPerPage;
+                      const paginatedLedger = filteredLedger.slice(startIndex, startIndex + rowsPerPage);
+                      return paginatedLedger.map((item) => {
+                        const isIncome = item.kategori === 'Pemasukan';
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-all">
+                            <td className="py-3 px-4 whitespace-nowrap">{item.tanggal.split('-').reverse().join('/')}</td>
+                            <td className="py-3 px-4 font-medium text-slate-800 break-words max-w-[240px]" title={item.keterangan}>
+                              {item.keterangan}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-emerald-600">
+                              {isIncome ? formatRupiah(item.jumlah) : <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-rose-600">
+                              {!isIncome ? formatRupiah(item.jumlah) : <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-3 px-4 text-center print:hidden">
+                              <button
+                                onClick={() => handleManualDelete(item.id, item.keterangan)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-all cursor-pointer"
+                                title="Hapus transaksi"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {filteredLedger.length > 0 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 sm:px-6 print:hidden mt-2">
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500">
+                      Menampilkan <span className="font-bold text-slate-700">{((currentPage - 1) * rowsPerPage) + 1}</span> hingga <span className="font-bold text-slate-700">{Math.min(currentPage * rowsPerPage, filteredLedger.length)}</span> dari <span className="font-bold text-slate-700">{filteredLedger.length}</span> data
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="relative inline-flex items-center px-2 py-1.5 rounded-l-md border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <span className="sr-only">Previous</span>
+                        Sebelumnya
+                      </button>
+                      
+                      {(() => {
+                        const totalPages = Math.ceil(filteredLedger.length / rowsPerPage);
+                        if (totalPages <= 7) {
+                          return Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-medium cursor-pointer transition-all ${
+                                currentPage === pageNum
+                                  ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-700 font-bold'
+                                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          ));
+                        }
+
+                        const pages = [];
+                        let startPage = Math.max(1, currentPage - 1);
+                        let endPage = Math.min(totalPages, currentPage + 1);
+
+                        if (currentPage <= 3) {
+                          endPage = 4;
+                        }
+                        if (currentPage >= totalPages - 2) {
+                          startPage = totalPages - 3;
+                        }
+
+                        if (startPage > 1) {
+                          pages.push(
+                            <button key={1} onClick={() => setCurrentPage(1)} className="relative inline-flex items-center px-3 py-1.5 border border-slate-200 text-xs font-medium cursor-pointer transition-all bg-white text-slate-500 hover:bg-slate-50">1</button>
+                          );
+                          if (startPage > 2) {
+                            pages.push(<span key="ellipsis-start" className="relative inline-flex items-center px-2 py-1.5 border border-slate-200 bg-white text-xs font-medium text-slate-500">...</span>);
+                          }
+                        }
+
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(
+                            <button
+                              key={i}
+                              onClick={() => setCurrentPage(i)}
+                              className={`relative inline-flex items-center px-3 py-1.5 border text-xs font-medium cursor-pointer transition-all ${
+                                currentPage === i
+                                  ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-700 font-bold'
+                                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                              }`}
+                            >
+                              {i}
+                            </button>
+                          );
+                        }
+
+                        if (endPage < totalPages) {
+                          if (endPage < totalPages - 1) {
+                            pages.push(<span key="ellipsis-end" className="relative inline-flex items-center px-2 py-1.5 border border-slate-200 bg-white text-xs font-medium text-slate-500">...</span>);
+                          }
+                          pages.push(
+                            <button key={totalPages} onClick={() => setCurrentPage(totalPages)} className="relative inline-flex items-center px-3 py-1.5 border border-slate-200 text-xs font-medium cursor-pointer transition-all bg-white text-slate-500 hover:bg-slate-50">{totalPages}</button>
+                          );
+                        }
+
+                        return pages;
+                      })()}
+
+                      <button
+                        onClick={() => setCurrentPage(Math.min(Math.ceil(filteredLedger.length / rowsPerPage), currentPage + 1))}
+                        disabled={currentPage === Math.ceil(filteredLedger.length / rowsPerPage) || filteredLedger.length === 0}
+                        className="relative inline-flex items-center px-2 py-1.5 rounded-r-md border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <span className="sr-only">Next</span>
+                        Berikutnya
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="p-3 bg-slate-50 border-t border-slate-100 rounded-xl text-[10px] text-slate-400 flex items-center gap-1.5 mt-4 print:hidden">
@@ -973,7 +1114,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                 />
               </div>
               <div>
-                <p className="font-bold text-slate-950 underline">Dewi Tri P.</p>
+                <p className="font-bold text-slate-950 underline">Dewi Tri Purwaningsih</p>
               </div>
             </div>
 
@@ -1076,7 +1217,13 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                   </div>
 
                   {/* Summary Informasi */}
-                  <div className="grid grid-cols-3 gap-4 mb-6 border border-slate-200 bg-slate-50/50 p-4 rounded-xl">
+                  <div className={`grid gap-4 mb-6 border border-slate-200 bg-slate-50/50 p-4 rounded-xl ${monthFilter !== 'all' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                    {monthFilter !== 'all' && (
+                      <div className="space-y-1 border-r border-slate-200 pr-4">
+                        <span className="block text-[10px] text-slate-500 font-semibold uppercase">Saldo B. Lalu</span>
+                        <span className="text-sm font-bold text-slate-800 block">{formatRupiah(financialSummary.saldoBulanLalu)}</span>
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <span className="block text-[10px] text-slate-500 font-semibold uppercase">Total Pemasukan</span>
                       <span className="text-sm font-bold text-emerald-600 block">{formatRupiah(financialSummary.totalPemasukan)}</span>
@@ -1155,7 +1302,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                     </div>
 
                     <div>
-                      <p className="font-bold text-slate-950 underline">Dewi Tri P.</p>
+                      <p className="font-bold text-slate-950 underline">Dewi Tri Purwaningsih</p>
                     </div>
                   </div>
 

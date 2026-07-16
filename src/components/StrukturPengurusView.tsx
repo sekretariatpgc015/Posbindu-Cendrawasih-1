@@ -17,7 +17,7 @@ export default function StrukturPengurusView() {
     {
       id: 'ketua',
       role: 'Ketua',
-      name: 'Dewi Tri P.',
+      name: 'Dewi Tri Purwaningsih',
       imageUrl: 'https://drive.google.com/thumbnail?id=1fCpYQeYeotor5ES2F4MIuKlLS9i-tJjl&sz=w500',
       category: 'inti',
       color: 'border-indigo-500 text-indigo-700 bg-indigo-50',

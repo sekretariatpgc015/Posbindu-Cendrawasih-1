@@ -432,8 +432,8 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
   }, [activeKunjunganList, tableAgeFilter, tableSearch, tableMonthFilter]);
 
   const paginatedKunjungan = useMemo(() => {
-    const startIdx = (tablePage - 1) * 25;
-    return filteredKunjungan.slice(startIdx, startIdx + 25);
+    const startIdx = (tablePage - 1) * 10;
+    return filteredKunjungan.slice(startIdx, startIdx + 10);
   }, [filteredKunjungan, tablePage]);
 
   const hypertensionKunjungan = useMemo(() => {
@@ -463,11 +463,11 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
   }, [hypertensionKunjungan, htAgeFilter, htSearch, htMonthFilter]);
 
   const paginatedHypertensionKunjungan = useMemo(() => {
-    const startIdx = (htTablePage - 1) * 25;
-    return filteredHypertensionKunjungan.slice(startIdx, startIdx + 25);
+    const startIdx = (htTablePage - 1) * 10;
+    return filteredHypertensionKunjungan.slice(startIdx, startIdx + 10);
   }, [filteredHypertensionKunjungan, htTablePage]);
 
-  const htTotalPages = Math.ceil(filteredHypertensionKunjungan.length / 25) || 1;
+  const htTotalPages = Math.ceil(filteredHypertensionKunjungan.length / 10) || 1;
 
   useEffect(() => {
     if (htTablePage > htTotalPages) {
@@ -1142,7 +1142,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 ) : (
                   paginatedKunjungan.map((k, index) => {
                     const isHypertensive = k.tdSistolik >= 139 || k.tdDiastolik >= 89;
-                    const globalIndex = (tablePage - 1) * 25 + index + 1;
+                    const globalIndex = (tablePage - 1) * 10 + index + 1;
                     return (
                       <tr key={k.id} className="hover:bg-slate-50/50 transition-all">
                         <td className="py-3.5 px-4 text-center font-medium text-slate-400">{globalIndex}</td>
@@ -1196,9 +1196,9 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
           
           {/* Pagination & Status Footer */}
           {(() => {
-            const totalPages = Math.ceil(filteredKunjungan.length / 25);
-            const startRange = filteredKunjungan.length === 0 ? 0 : (tablePage - 1) * 25 + 1;
-            const endRange = Math.min(tablePage * 25, filteredKunjungan.length);
+            const totalPages = Math.ceil(filteredKunjungan.length / 10);
+            const startRange = filteredKunjungan.length === 0 ? 0 : (tablePage - 1) * 10 + 1;
+            const endRange = Math.min(tablePage * 10, filteredKunjungan.length);
             
             return (
               <div className="p-4 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -1401,7 +1401,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
 
                     return (
                       <tr key={`hyp-${k.id}`} className="hover:bg-red-50/10 transition-all">
-                        <td className="py-4 px-6 text-center font-medium text-slate-400">{(htTablePage - 1) * 25 + index + 1}</td>
+                        <td className="py-4 px-6 text-center font-medium text-slate-400">{(htTablePage - 1) * 10 + index + 1}</td>
                         <td className="py-4 px-6 whitespace-nowrap">{k.tanggal ? k.tanggal.split('-').reverse().join('/') : '-'}</td>
                         <td className="py-4 px-6 font-semibold text-slate-900">{k.nama}</td>
                         <td className="py-4 px-6 text-center">
@@ -1439,7 +1439,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
           {htTotalPages > 1 && (
             <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">
-                Menampilkan {(htTablePage - 1) * 25 + 1} - {Math.min(htTablePage * 25, filteredHypertensionKunjungan.length)} dari {filteredHypertensionKunjungan.length} hasil
+                Menampilkan {(htTablePage - 1) * 10 + 1} - {Math.min(htTablePage * 10, filteredHypertensionKunjungan.length)} dari {filteredHypertensionKunjungan.length} hasil
               </span>
               
               <div className="flex items-center gap-2">
@@ -1718,10 +1718,15 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                           <th className="border border-slate-300 py-1.5 px-2">L/P</th>
                           <th className="border border-slate-300 py-1.5 px-2">Usia</th>
                           <th className="border border-slate-300 py-1.5 px-2">RT</th>
+                          <th className="border border-slate-300 py-1.5 px-2 text-center">TB</th>
+                          <th className="border border-slate-300 py-1.5 px-2 text-center">BB</th>
+                          <th className="border border-slate-300 py-1.5 px-2 text-center">IMT</th>
+                          <th className="border border-slate-300 py-1.5 px-2 text-center">LP</th>
                           <th className="border border-slate-300 py-1.5 px-2 text-center">TD</th>
                           <th className="border border-slate-300 py-1.5 px-2 text-center">GDS</th>
                           <th className="border border-slate-300 py-1.5 px-2 text-center">CHOL</th>
                           <th className="border border-slate-300 py-1.5 px-2 text-center">AU</th>
+                          <th className="border border-slate-300 py-1.5 px-2 text-center">HB</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1733,15 +1738,20 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                             <td className="border border-slate-300 py-1 px-2">{k.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td>
                             <td className="border border-slate-300 py-1 px-2">{k.usia}</td>
                             <td className="border border-slate-300 py-1 px-2">{k.rt}</td>
+                            <td className="border border-slate-300 py-1 px-2 text-center">{k.tb || '-'}</td>
+                            <td className="border border-slate-300 py-1 px-2 text-center">{k.bb || '-'}</td>
+                            <td className="border border-slate-300 py-1 px-2 text-center">{k.tb && k.bb ? (k.bb / Math.pow(k.tb / 100, 2)).toFixed(1) : '-'}</td>
+                            <td className="border border-slate-300 py-1 px-2 text-center">{k.lp || '-'}</td>
                             <td className="border border-slate-300 py-1 px-2 text-center">{k.tdSistolik}/{k.tdDiastolik}</td>
                             <td className="border border-slate-300 py-1 px-2 text-center">{k.gds || '-'}</td>
                             <td className="border border-slate-300 py-1 px-2 text-center">{k.chol || '-'}</td>
                             <td className="border border-slate-300 py-1 px-2 text-center">{k.au || '-'}</td>
+                            <td className="border border-slate-300 py-1 px-2 text-center">{k.hb || '-'}</td>
                           </tr>
                         ))}
                         {(printPreviewMode === 'kunjungan' ? filteredKunjungan : filteredHypertensionKunjungan).length === 0 && (
                           <tr>
-                            <td colSpan={10} className="border border-slate-300 py-4 text-center text-slate-400 italic">
+                            <td colSpan={15} className="border border-slate-300 py-4 text-center text-slate-400 italic">
                               Tidak ada data yang ditampilkan.
                             </td>
                           </tr>
