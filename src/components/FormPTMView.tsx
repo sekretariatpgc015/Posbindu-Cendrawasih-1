@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, RefreshCw, UserCheck, HeartPulse, Search, Info, ChevronRight, FileText, Download, AlertTriangle, Filter, Printer } from 'lucide-react';
+import { Save, RefreshCw, UserCheck, HeartPulse, Search, Info, ChevronRight, FileText, Download, AlertTriangle, Filter, Printer, Settings, Copy, Check, Cloud, Code2 } from 'lucide-react';
 import { Warga, Kunjungan } from '../types';
 import { calculateAge } from '../data/mockData';
-import { fetchGoogleSheetKunjungan } from '../utils/csvSync';
+import { fetchGoogleSheetKunjungan, parseDateToYYYYMMDD } from '../utils/csvSync';
 
 interface FormPTMViewProps {
   wargaList: Warga[];
@@ -18,27 +18,114 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
   const [externalError, setExternalError] = useState<string | null>(null);
   const [printPreviewMode, setPrintPreviewMode] = useState<"none" | "kunjungan" | "hipertensi">("none");
 
+  // Google Sheets Integration State
+  const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
+    const stored = localStorage.getItem('posbindu_kunjungan_apps_script_url');
+    if (stored && stored.trim() !== '') return stored;
+    return localStorage.getItem('posbindu_apps_script_url') || '';
+  });
+  const [sendToGSheets, setSendToGSheets] = useState<boolean>(() => {
+    return localStorage.getItem('posbindu_kunjungan_send_to_gsheets') === 'true';
+  });
+  const [isSubmittingToGSheets, setIsSubmittingToGSheets] = useState<boolean>(false);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [showAppsScriptInstructions, setShowAppsScriptInstructions] = useState<boolean>(false);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(() => {
+    return localStorage.getItem('posbindu_kunjungan_last_synced') || null;
+  });
+
   useEffect(() => {
-    let isMounted = true;
+    localStorage.setItem('posbindu_kunjungan_apps_script_url', appsScriptUrl);
+  }, [appsScriptUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('posbindu_kunjungan_send_to_gsheets', sendToGSheets ? 'true' : 'false');
+  }, [sendToGSheets]);
+
+  const handleSyncGoogleSheet = async (silent = false) => {
+    if (isLoadingExternal) return;
     setIsLoadingExternal(true);
     setExternalError(null);
-    
-    fetchGoogleSheetKunjungan('/api/proxy-kunjungan')
-      .then(data => {
-        if (!isMounted) return;
-        setExternalKunjunganList(data);
-        setIsLoadingExternal(false);
-      })
-      .catch(err => {
-        if (!isMounted) return;
-        console.error('Error fetching Google Sheets Kunjungan inside FormPTMView:', err);
-        setExternalError(err.message || 'Gagal memuat data kunjungan dari Google Sheets.');
-        setIsLoadingExternal(false);
-      });
+    try {
+      let data: Kunjungan[] = [];
+      let fetchedUsingAppsScript = false;
 
-    return () => {
-      isMounted = false;
-    };
+      if (appsScriptUrl && appsScriptUrl.trim() !== '') {
+        try {
+          const response = await fetch('/api/submit-keuangan-proxy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: appsScriptUrl.trim(),
+              payload: { action: 'read' }
+            })
+          });
+
+          if (response.ok) {
+            const resData = await response.json();
+            if (resData.success && Array.isArray(resData.data)) {
+              data = resData.data.map((item: any) => ({
+                id: item.id || `k-${Date.now()}-${Math.random()}`,
+                no: parseInt(item.no) || 0,
+                tanggal: parseDateToYYYYMMDD(item.tanggal || ''),
+                nama: item.nama || '',
+                jenisKelamin: item.jenisKelamin || 'Laki-laki',
+                nik: item.nik || '',
+                tanggalLahir: parseDateToYYYYMMDD(item.tanggalLahir || ''),
+                usia: parseInt(item.usia) || 0,
+                alamat: item.alamat || '',
+                rt: (item.rt || '').toString().trim().replace(/\D/g, '').padStart(3, '0') || '001',
+                tdSistolik: parseInt(item.tdSistolik) || 0,
+                tdDiastolik: parseInt(item.tdDiastolik) || 0,
+                tb: parseFloat(item.tb) || 0,
+                bb: parseFloat(item.bb) || 0,
+                lp: parseFloat(item.lp) || 0,
+                gds: parseInt(item.gds) || 0,
+                chol: parseInt(item.chol) || 0,
+                au: parseFloat(item.au) || 0,
+                hb: parseFloat(item.hb) || 0,
+              }));
+              fetchedUsingAppsScript = true;
+            }
+          }
+        } catch (asErr) {
+          console.warn('Failed to fetch via custom Apps Script read action, falling back to public CSV:', asErr);
+        }
+      }
+
+      if (!fetchedUsingAppsScript) {
+        data = await fetchGoogleSheetKunjungan('/api/proxy-kunjungan');
+      }
+
+      if (data) {
+        setExternalKunjunganList(data);
+        const now = new Date().toLocaleString('id-ID', {
+          dateStyle: 'medium',
+          timeStyle: 'short'
+        });
+        setLastSynced(now);
+        localStorage.setItem('posbindu_kunjungan_last_synced', now);
+        if (!silent) {
+          setNotificationMessage(`Berhasil menyinkronkan ${data.length} data kunjungan dari Google Sheets!`);
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 5000);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to sync kunjungan from Google Sheets:', err);
+      if (!silent) {
+        setExternalError(err.message || 'Gagal menyinkronkan data dari Google Sheets.');
+      }
+    } finally {
+      setIsLoadingExternal(false);
+    }
+  };
+
+  useEffect(() => {
+    handleSyncGoogleSheet(true);
   }, []);
 
   // Merge local edits/additions with external list (ensure newly added sessions are prepended)
@@ -64,7 +151,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
   const [tanggalLahir, setTanggalLahir] = useState<string>('');
   const [usia, setUsia] = useState<number>(0);
   const [alamat, setAlamat] = useState<string>('');
-  const [rt, setRt] = useState<string>('01');
+  const [rt, setRt] = useState<string>('001');
   const [noKK, setNoKK] = useState<string>(''); // For adding to citizen list if new
 
   // Health Metrics
@@ -269,8 +356,20 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+  
+  const formatDateToDMY = (dateStr: string) => {
+    if (!dateStr) return '';
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3 && parts[0].length === 4) {
+        // YYYY-MM-DD -> DD/MM/YYYY
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    return dateStr;
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -284,6 +383,21 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     // Assemble Kunjungan object
     const finalSistolik = parseInt(tdSistolik) || 120;
     const finalDiastolik = parseInt(tdDiastolik) || 80;
+    const formattedRT = rt.padStart(3, '0');
+
+    const parseFormattedFloat = (val: string): number => {
+      if (!val) return 0;
+      const normalized = val.toString().replace(/,/g, '.');
+      const parsed = parseFloat(normalized);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    const parseFormattedInt = (val: string): number => {
+      if (!val) return 0;
+      const normalized = val.toString().replace(/,/g, '.');
+      const parsed = parseInt(normalized);
+      return isNaN(parsed) ? 0 : parsed;
+    };
 
     const newKunjungan: Kunjungan = {
       id: `k-${Date.now()}`,
@@ -295,16 +409,16 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
       tanggalLahir,
       usia,
       alamat,
-      rt,
+      rt: formattedRT,
       tdSistolik: finalSistolik,
       tdDiastolik: finalDiastolik,
-      tb: parseFloat(tb) || 0,
-      bb: parseFloat(bb) || 0,
-      lp: parseFloat(lp) || 0,
-      gds: parseInt(gds) || 0,
-      chol: parseInt(chol) || 0,
-      au: parseFloat(au) || 0,
-      hb: parseFloat(hb) || 0,
+      tb: parseFormattedFloat(tb),
+      bb: parseFormattedFloat(bb),
+      lp: parseFormattedFloat(lp),
+      gds: parseFormattedInt(gds),
+      chol: parseFormattedInt(chol),
+      au: parseFormattedFloat(au),
+      hb: parseFormattedFloat(hb),
     };
 
     // Check if citizen already exists in wargaList
@@ -320,14 +434,74 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
         nik,
         tanggalLahir,
         alamat,
-        rt
+        rt: formattedRT
       };
+    }
+
+    let gSheetsStatusMessage = '';
+    if (sendToGSheets && appsScriptUrl.trim() !== '') {
+      setIsSubmittingToGSheets(true);
+      try {
+        const response = await fetch('/api/submit-keuangan-proxy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: appsScriptUrl.trim(),
+            payload: {
+              tanggal: formatDateToDMY(newKunjungan.tanggal),
+              nama: newKunjungan.nama,
+              jenisKelamin: newKunjungan.jenisKelamin.toUpperCase(),
+              nik: newKunjungan.nik,
+              tanggalLahir: formatDateToDMY(newKunjungan.tanggalLahir),
+              usia: newKunjungan.usia,
+              alamat: newKunjungan.alamat,
+              rt: "'" + newKunjungan.rt,
+              td: `${newKunjungan.tdSistolik}/${newKunjungan.tdDiastolik}`,
+              tb: newKunjungan.tb,
+              bb: newKunjungan.bb,
+              lp: newKunjungan.lp,
+              gds: newKunjungan.gds,
+              chol: newKunjungan.chol,
+              au: newKunjungan.au,
+              hb: newKunjungan.hb,
+            }
+          })
+        });
+
+        if (!response.ok) {
+          let errorMsg = 'Gagal mengirim melalui proxy server';
+          try {
+            const errData = await response.json();
+            if (errData.error) errorMsg = errData.error;
+          } catch(e) {}
+          throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          gSheetsStatusMessage = ' dan berhasil disinkronkan ke Google Sheets';
+        } else {
+          throw new Error(data.error || 'Respon gagal dari proxy');
+        }
+      } catch (err: any) {
+        console.error('Failed to submit visit to Google Sheets:', err);
+        gSheetsStatusMessage = ' (tersimpan lokal, gagal kirim ke Google Sheets)';
+        if (err.message && err.message.includes('Apps Script URL')) {
+          alert('GAGAL: URL Apps Script tidak valid atau tidak ditemukan (404).\n\nPastikan Anda menyalin URL Web App yang benar (berakhir dengan /exec). Silakan perbaiki URL pada pengaturan "Integrasi Google Sheets" di bagian atas.');
+        } else {
+          alert(`Gagal sinkronisasi ke GSheets: ${err.message}`);
+        }
+      } finally {
+        setIsSubmittingToGSheets(false);
+      }
     }
 
     onSaveKunjungan(newKunjungan, newWarga);
 
     // Show success notification & reset inputs (except date)
-    setNotificationMessage(`Pemeriksaan ke-${nextNo} atas nama ${nama} berhasil disimpan!`);
+    setNotificationMessage(`Pemeriksaan ke-${nextNo} atas nama ${nama} berhasil disimpan${gSheetsStatusMessage}!`);
     setShowNotification(true);
     setErrors({});
 
@@ -337,7 +511,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     setJenisKelamin('Laki-laki');
     setTanggalLahir('');
     setAlamat('');
-    setRt('01');
+    setRt('001');
     setNoKK('');
     setTdSistolik('');
     setTdDiastolik('');
@@ -349,11 +523,10 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     setAu('');
     setHb('');
 
-    // Go back to dashboard after 1.5s
+    // Clear notification after 2s, but stay on the input page
     setTimeout(() => {
       setShowNotification(false);
-      onNavigateToDashboard();
-    }, 1500);
+    }, 2000);
   };
 
   const [showConfirmReset, setShowConfirmReset] = useState<boolean>(false);
@@ -364,7 +537,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
     setJenisKelamin('Laki-laki');
     setTanggalLahir('');
     setAlamat('');
-    setRt('01');
+    setRt('001');
     setNoKK('');
     setTdSistolik('');
     setTdDiastolik('');
@@ -410,10 +583,24 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
-    const parts = dateStr.split('-');
-    if (parts.length === 3 && parts[0].length === 4) {
-      const [year, month, day] = parts;
-      return `${day}-${month}-${year}`;
+    // Clean up or extract date part if it has time
+    const cleanDateStr = dateStr.trim().split(' ')[0];
+    
+    // Split by - or /
+    const separator = cleanDateStr.includes('-') ? '-' : '/';
+    const parts = cleanDateStr.split(separator);
+    
+    if (parts.length === 3) {
+      // Check if it's YYYY at the beginning
+      if (parts[0].length === 4) {
+        const [year, month, day] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
+      // Check if it's YYYY at the end
+      if (parts[2].length === 4) {
+        const [day, month, year] = parts;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
     }
     return dateStr;
   };
@@ -495,7 +682,17 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
       {/* Header section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#FFC8DD] p-6 rounded-2xl border border-slate-100 shadow-sm gap-4">
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">Formulir Input PTM (Penyakit Tidak Menular)</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">Formulir Input PTM (Penyakit Tidak Menular)</h1>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 hover:bg-white/50 text-slate-700 hover:text-indigo-700 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-transparent hover:border-slate-300"
+              title="Pengaturan Sinkronisasi Google Sheets"
+              id="btn-open-ptm-gsheets-settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
           <p className="text-xs text-slate-500 mt-1">Pencatatan data antropometri, tensi, dan skrining darah berkala warga.</p>
         </div>
         <button
@@ -721,11 +918,11 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 id="input-rt"
                 className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.rt ? 'border-red-500 ring-1 ring-red-500 bg-red-50/20' : 'border-slate-200'} text-slate-700 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer`}
               >
-                <option value="01">RT 01</option>
-                <option value="02">RT 02</option>
-                <option value="03">RT 03</option>
-                <option value="04">RT 04</option>
-                <option value="05">RT 05</option>
+                <option value="001">RT 001</option>
+                <option value="002">RT 002</option>
+                <option value="003">RT 003</option>
+                <option value="004">RT 004</option>
+                <option value="005">RT 005</option>
               </select>
               {errors.rt && (
                 <span className="text-[10px] text-red-500 font-semibold mt-1 block">{errors.rt}</span>
@@ -1014,6 +1211,27 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
         </div>
 
         {/* Buttons */}
+        <div className="flex flex-col sm:flex-row justify-end items-center gap-3">
+          <button
+            type="button"
+            onClick={resetForm}
+            id="btn-clear-form"
+            className="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold flex justify-center items-center gap-2 cursor-pointer transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Kosongkan Form
+          </button>
+          
+          <button
+            type="submit"
+            id="btn-submit-ptm"
+            className="w-full sm:w-auto px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md text-xs font-semibold flex justify-center items-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+          >
+            <Save className="w-4 h-4" />
+            Simpan Catatan Pemeriksaan
+          </button>
+        </div>
+
       {/* Tables Section */}
       <div className="grid grid-cols-1 gap-6 mt-8" id="tables-section">
         
@@ -1355,7 +1573,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                   <th className="py-3 px-6 text-center">No</th>
                   <th className="py-3 px-6">Tanggal Periksa</th>
                   <th className="py-3 px-6">Nama Lengkap</th>
-                  <th className="py-3 px-6 text-center">Gender</th>
+                  <th className="py-3 px-6 text-center">L/P</th>
                   <th className="py-3 px-6">NIK</th>
                   <th className="py-3 px-6 text-center">Usia</th>
                   <th className="py-3 px-6">Alamat</th>
@@ -1402,7 +1620,7 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                     return (
                       <tr key={`hyp-${k.id}`} className="hover:bg-red-50/10 transition-all">
                         <td className="py-4 px-6 text-center font-medium text-slate-400">{(htTablePage - 1) * 10 + index + 1}</td>
-                        <td className="py-4 px-6 whitespace-nowrap">{k.tanggal ? k.tanggal.split('-').reverse().join('/') : '-'}</td>
+                        <td className="py-4 px-6 whitespace-nowrap">{formatDate(k.tanggal)}</td>
                         <td className="py-4 px-6 font-semibold text-slate-900">{k.nama}</td>
                         <td className="py-4 px-6 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${k.jenisKelamin === 'Laki-laki' ? 'bg-blue-50 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
@@ -1504,26 +1722,6 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
           </div>
         </div>
       </div>
-        <div className="flex flex-col sm:flex-row justify-end items-center gap-3">
-          <button
-            type="button"
-            onClick={resetForm}
-            id="btn-clear-form"
-            className="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold flex justify-center items-center gap-2 cursor-pointer transition-all"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Kosongkan Form
-          </button>
-          
-          <button
-            type="submit"
-            id="btn-submit-ptm"
-            className="w-full sm:w-auto px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md text-xs font-semibold flex justify-center items-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
-          >
-            <Save className="w-4 h-4" />
-            Simpan Catatan Pemeriksaan
-          </button>
-        </div>
 
       </form>
 
@@ -1825,6 +2023,340 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
                 <span>Cetak Laporan</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Google Sheets Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 bg-indigo-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cloud className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800">Integrasi & Sinkronisasi Google Sheets</h2>
+                  <p className="text-[10px] text-slate-500">Hubungkan tabel web ini dengan Google Spreadsheet pribadi Anda</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-xl transition-all cursor-pointer text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-600">
+              
+              {/* Toggle Automatic Submission */}
+              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between gap-4">
+                <div>
+                  <label htmlFor="toggle-ptm-autosync" className="font-bold text-slate-700 cursor-pointer block">Kirim Otomatis ke Google Sheets</label>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Kirim data pemeriksaan baru ke spreadsheet secara real-time saat disimpan</p>
+                </div>
+                <button
+                  type="button"
+                  id="toggle-ptm-autosync"
+                  onClick={() => setSendToGSheets(!sendToGSheets)}
+                  className={`w-12 h-6.5 rounded-full p-1 transition-colors duration-200 focus:outline-none cursor-pointer ${sendToGSheets ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                >
+                  <div className={`w-4.5 h-4.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${sendToGSheets ? 'translate-x-5.5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Sync Status / Manual Sync Trigger */}
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-slate-700">Status Sinkronisasi</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {lastSynced ? `Terakhir disinkronkan: ${lastSynced}` : 'Belum pernah disinkronkan.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleSyncGoogleSheet(false);
+                  }}
+                  disabled={isLoadingExternal}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold rounded-lg flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingExternal ? 'animate-spin' : ''}`} />
+                  <span>{isLoadingExternal ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
+                </button>
+              </div>
+
+              {/* URL Apps Script Input */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700">URL Google Apps Script Web App</label>
+                <input
+                  type="url"
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  value={appsScriptUrl}
+                  onChange={(e) => setAppsScriptUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-700 font-mono text-[11px] outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all"
+                />
+                <p className="text-[10px] text-slate-400">Pastikan URL berakhir dengan <code className="font-mono text-slate-600 bg-slate-100 px-1 rounded">/exec</code>. URL ini digunakan untuk menulis dan membaca data pemeriksaan (PTM) secara langsung.</p>
+              </div>
+
+              {/* Instructions Accordion */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowAppsScriptInstructions(!showAppsScriptInstructions)}
+                  className="w-full p-3 bg-slate-50 hover:bg-slate-100 text-left font-bold text-slate-700 flex justify-between items-center transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Code2 className="w-4 h-4 text-indigo-600" />
+                    <span>Panduan & Kode Google Apps Script</span>
+                  </div>
+                  <span>{showAppsScriptInstructions ? '▲' : '▼'}</span>
+                </button>
+
+                {showAppsScriptInstructions && (
+                  <div className="p-4 border-t border-slate-100 bg-white space-y-3 max-h-[250px] overflow-y-auto">
+                    <p className="font-medium text-slate-700">Langkah-langkah:</p>
+                    <ol className="list-decimal pl-4 space-y-1">
+                      <li>Buka Google Spreadsheet target Anda.</li>
+                      <li>Di menu atas, pilih <strong>Extensions &gt; Apps Script</strong>.</li>
+                      <li>Hapus kode bawaan, lalu salin dan tempel kode di bawah ini.</li>
+                      <li>Simpan proyek dengan ikon disket.</li>
+                      <li>Klik tombol <strong>Deploy &gt; New deployment</strong> di bagian kanan atas.</li>
+                      <li>Pilih jenis deployment <strong>Web app</strong> (klik ikon gerigi di sebelah "Select type").</li>
+                      <li>Atur <strong>Execute as:</strong> <code className="bg-slate-100 p-0.5 rounded text-indigo-700 font-bold">Me</code>.</li>
+                      <li>Atur <strong>Who has access:</strong> <code className="bg-slate-100 p-0.5 rounded text-indigo-700 font-bold">Anyone</code>.</li>
+                      <li>Klik <strong>Deploy</strong>, lalu salin <strong>Web app URL</strong> yang dihasilkan (berakhir dengan <code className="font-mono bg-slate-100 px-1 rounded">/exec</code>) dan tempel di input URL di atas.</li>
+                    </ol>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-indigo-600">Kode Apps Script (Kunjungan PTM):</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const code = `function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.action === "read") {
+      var sheetName = "Kunjungan";
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        var sheets = ss.getSheets();
+        sheet = sheets[0];
+      }
+      var values = sheet.getDataRange().getValues();
+      var records = [];
+      if (values.length > 1) {
+        var headers = values[0].map(function(h) { return h.toString().toUpperCase().trim(); });
+        var idxID = headers.indexOf("ID");
+        var idxNo = headers.indexOf("NO");
+        var idxTanggal = headers.indexOf("TANGGAL");
+        var idxNama = headers.indexOf("NAMA");
+        var idxGender = headers.indexOf("JENIS KELAMIN") !== -1 ? headers.indexOf("JENIS KELAMIN") : headers.indexOf("L/P");
+        var idxNIK = headers.indexOf("NIK");
+        var idxTglLahir = headers.indexOf("TANGGAL LAHIR") !== -1 ? headers.indexOf("TANGGAL LAHIR") : headers.indexOf("TGL. LAHIR");
+        var idxUsia = headers.indexOf("USIA");
+        var idxAlamat = headers.indexOf("ALAMAT");
+        var idxRT = headers.indexOf("RT");
+        var idxTD = headers.indexOf("TD") !== -1 ? headers.indexOf("TD") : headers.indexOf("TEKANAN DARAH");
+        var idxTB = headers.indexOf("TB");
+        var idxBB = headers.indexOf("BB");
+        var idxLP = headers.indexOf("LP");
+        var idxGDS = headers.indexOf("GDS");
+        var idxChol = headers.indexOf("CHOL") !== -1 ? headers.indexOf("CHOL") : headers.indexOf("KOLOSTEROL");
+        var idxAU = headers.indexOf("AU") !== -1 ? headers.indexOf("AU") : headers.indexOf("ASAM URAT");
+        var idxHB = headers.indexOf("HB") !== -1 ? headers.indexOf("HB") : headers.indexOf("HEMOGLOBIN");
+
+        for (var i = 1; i < values.length; i++) {
+          var row = values[i];
+          if (!row[idxNama !== -1 ? idxNama : 1]) continue;
+          
+          var tdValue = idxTD !== -1 ? row[idxTD].toString() : "120/80";
+          var tdParts = tdValue.split("/");
+          var tdSistolik = parseInt(tdParts[0]) || 120;
+          var tdDiastolik = parseInt(tdParts[1]) || 80;
+
+          records.push({
+            id: idxID !== -1 ? row[idxID].toString() : "k-" + i,
+            no: idxNo !== -1 ? parseInt(row[idxNo]) || i : i,
+            tanggal: idxTanggal !== -1 ? row[idxTanggal].toString() : "",
+            nama: idxNama !== -1 ? row[idxNama].toString() : "",
+            jenisKelamin: idxGender !== -1 ? (row[idxGender].toString().toUpperCase() === "L" || row[idxGender].toString().toUpperCase() === "LAKI-LAKI" ? "Laki-laki" : "Perempuan") : "Laki-laki",
+            nik: idxNIK !== -1 ? row[idxNIK].toString() : "",
+            tanggalLahir: idxTglLahir !== -1 ? row[idxTglLahir].toString() : "",
+            usia: idxUsia !== -1 ? parseInt(row[idxUsia]) || 0 : 0,
+            alamat: idxAlamat !== -1 ? row[idxAlamat].toString() : "",
+            rt: idxRT !== -1 ? row[idxRT].toString().padStart(3, "0") : "001",
+            tdSistolik: tdSistolik,
+            tdDiastolik: tdDiastolik,
+            tb: idxTB !== -1 ? parseFloat(row[idxTB]) || 0 : 0,
+            bb: idxBB !== -1 ? parseFloat(row[idxBB]) || 0 : 0,
+            lp: idxLP !== -1 ? parseFloat(row[idxLP]) || 0 : 0,
+            gds: idxGDS !== -1 ? parseInt(row[idxGDS]) || 0 : 0,
+            chol: idxChol !== -1 ? parseInt(row[idxChol]) || 0 : 0,
+            au: idxAU !== -1 ? parseFloat(row[idxAU]) || 0 : 0,
+            hb: idxHB !== -1 ? parseFloat(row[idxHB]) || 0 : 0
+          });
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: records }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } else {
+      var sheetName = "Kunjungan";
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        var sheets = ss.getSheets();
+        sheet = sheets[0];
+      }
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow([
+          "TANGGAL", "NAMA", "JENIS KELAMIN", "NIK", 
+          "TANGGAL LAHIR", "USIA", "ALAMAT", "RT", "TD", 
+          "TB", "BB", "LP", "GDS", "CHOL", "AU", "HB"
+        ]);
+      }
+      sheet.appendRow([
+        data.tanggal, data.nama, data.jenisKelamin, data.nik,
+        data.tanggalLahir, data.usia, data.alamat, data.rt, data.td,
+        data.tb, data.bb, data.lp, data.gds, data.chol, data.au, data.hb
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ success: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+                            navigator.clipboard.writeText(code);
+                            setIsCopied(true);
+                            setTimeout(() => setIsCopied(false), 2000);
+                          }}
+                          className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{isCopied ? 'Tersalin!' : 'Salin Kode'}</span>
+                        </button>
+                      </div>
+                      <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto text-[10px] font-mono leading-relaxed max-h-[150px]">
+{`function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.action === "read") {
+      var sheetName = "Kunjungan";
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        var sheets = ss.getSheets();
+        sheet = sheets[0];
+      }
+      var values = sheet.getDataRange().getValues();
+      var records = [];
+      if (values.length > 1) {
+        var headers = values[0].map(function(h) { return h.toString().toUpperCase().trim(); });
+        var idxID = headers.indexOf("ID");
+        var idxNo = headers.indexOf("NO");
+        var idxTanggal = headers.indexOf("TANGGAL");
+        var idxNama = headers.indexOf("NAMA");
+        var idxGender = headers.indexOf("JENIS KELAMIN") !== -1 ? headers.indexOf("JENIS KELAMIN") : headers.indexOf("L/P");
+        var idxNIK = headers.indexOf("NIK");
+        var idxTglLahir = headers.indexOf("TANGGAL LAHIR") !== -1 ? headers.indexOf("TANGGAL LAHIR") : headers.indexOf("TGL. LAHIR");
+        var idxUsia = headers.indexOf("USIA");
+        var idxAlamat = headers.indexOf("ALAMAT");
+        var idxRT = headers.indexOf("RT");
+        var idxTD = headers.indexOf("TD") !== -1 ? headers.indexOf("TD") : headers.indexOf("TEKANAN DARAH");
+        var idxTB = headers.indexOf("TB");
+        var idxBB = headers.indexOf("BB");
+        var idxLP = headers.indexOf("LP");
+        var idxGDS = headers.indexOf("GDS");
+        var idxChol = headers.indexOf("CHOL") !== -1 ? headers.indexOf("CHOL") : headers.indexOf("KOLOSTEROL");
+        var idxAU = headers.indexOf("AU") !== -1 ? headers.indexOf("AU") : headers.indexOf("ASAM URAT");
+        var idxHB = headers.indexOf("HB") !== -1 ? headers.indexOf("HB") : headers.indexOf("HEMOGLOBIN");
+
+        for (var i = 1; i < values.length; i++) {
+          var row = values[i];
+          if (!row[idxNama !== -1 ? idxNama : 1]) continue;
+          
+          var tdValue = idxTD !== -1 ? row[idxTD].toString() : "120/80";
+          var tdParts = tdValue.split("/");
+          var tdSistolik = parseInt(tdParts[0]) || 120;
+          var tdDiastolik = parseInt(tdParts[1]) || 80;
+
+          records.push({
+            id: idxID !== -1 ? row[idxID].toString() : "k-" + i,
+            no: idxNo !== -1 ? parseInt(row[idxNo]) || i : i,
+            tanggal: idxTanggal !== -1 ? row[idxTanggal].toString() : "",
+            nama: idxNama !== -1 ? row[idxNama].toString() : "",
+            jenisKelamin: idxGender !== -1 ? (row[idxGender].toString().toUpperCase() === "L" || row[idxGender].toString().toUpperCase() === "LAKI-LAKI" ? "Laki-laki" : "Perempuan") : "Laki-laki",
+            nik: idxNIK !== -1 ? row[idxNIK].toString() : "",
+            tanggalLahir: idxTglLahir !== -1 ? row[idxTglLahir].toString() : "",
+            usia: idxUsia !== -1 ? parseInt(row[idxUsia]) || 0 : 0,
+            alamat: idxAlamat !== -1 ? row[idxAlamat].toString() : "",
+            rt: idxRT !== -1 ? row[idxRT].toString().padStart(3, "0") : "001",
+            tdSistolik: tdSistolik,
+            tdDiastolik: tdDiastolik,
+            tb: idxTB !== -1 ? parseFloat(row[idxTB]) || 0 : 0,
+            bb: idxBB !== -1 ? parseFloat(row[idxBB]) || 0 : 0,
+            lp: idxLP !== -1 ? parseFloat(row[idxLP]) || 0 : 0,
+            gds: idxGDS !== -1 ? parseInt(row[idxGDS]) || 0 : 0,
+            chol: idxChol !== -1 ? parseInt(row[idxChol]) || 0 : 0,
+            au: idxAU !== -1 ? parseFloat(row[idxAU]) || 0 : 0,
+            hb: idxHB !== -1 ? parseFloat(row[idxHB]) || 0 : 0
+          });
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: records }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } else {
+      var sheetName = "Kunjungan";
+      var sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        var sheets = ss.getSheets();
+        sheet = sheets[0];
+      }
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow([
+          "TANGGAL", "NAMA", "JENIS KELAMIN", "NIK", 
+          "TANGGAL LAHIR", "USIA", "ALAMAT", "RT", "TD", 
+          "TB", "BB", "LP", "GDS", "CHOL", "AU", "HB"
+        ]);
+      }
+      sheet.appendRow([
+        data.tanggal, data.nama, data.jenisKelamin, data.nik,
+        data.tanggalLahir, data.usia, data.alamat, data.rt, data.td,
+        data.tb, data.bb, data.lp, data.gds, data.chol, data.au, data.hb
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ success: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-sm"
+              >
+                Selesai & Tutup
+              </button>
+            </div>
+
           </div>
         </div>
       )}

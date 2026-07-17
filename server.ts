@@ -1,6 +1,17 @@
 import express from "express";
 import path from "path";
 
+// Prevent EPIPE (broken pipe) errors from crashing the Node.js process when standard output streams are closed
+process.stdout.on('error', (err: any) => {
+  if (err.code === 'EPIPE') return;
+  console.error('stdout error:', err);
+});
+
+process.stderr.on('error', (err: any) => {
+  if (err.code === 'EPIPE') return;
+  console.error('stderr error:', err);
+});
+
 // Fetch CSV data using native global fetch
 async function fetchCsvFromSheets(url: string): Promise<string> {
   const response = await fetch(url, {
@@ -43,7 +54,7 @@ async function startServer() {
   // Proxy Google Sheet Kunjungan (Visits) to bypass CORS and iframe sandbox restrictions
   app.get("/api/proxy-kunjungan", async (req, res) => {
     try {
-      const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTYG3FkCHn7OXTyiLCtqdLwFkFexQQVXVlPtwpxIOlzWt3mpcCZbMyYDp2p4PabbbQnB1GciwkokN20/pub?gid=0&single=true&output=csv';
+      const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4OSVPITouakbSPpjRpmCmotvIp98MGWNdZmPs4isrOiU2KTGfXSRz89UBfTkf5Xc1a4D57mKXcVDU/pub?gid=0&single=true&output=csv';
       const text = await fetchCsvFromSheets(url);
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -106,7 +117,24 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid Apps Script URL. Pastikan Anda menggunakan URL Web App Apps Script (berakhir dengan /exec), BUKAN URL Spreadsheet/CSV." });
       }
 
-      res.json({ success: true, responseText: text });
+      // Try parsing Apps Script response as JSON to return normalized properties
+      try {
+        const parsed = JSON.parse(text);
+        const isSuccess = parsed.success === true || parsed.status === 'success' || parsed.success === 'true' || parsed.status === 'success';
+        return res.json({
+          success: isSuccess,
+          status: isSuccess ? 'success' : 'error',
+          ...parsed
+        });
+      } catch (e) {
+        // Fallback if not valid JSON
+        const isSuccess = text.toLowerCase().includes("success") || text.toLowerCase().includes("ok");
+        return res.json({
+          success: isSuccess,
+          status: isSuccess ? 'success' : 'error',
+          responseText: text
+        });
+      }
     } catch (err: any) {
       console.error("Proxy submit keuangan failed:", err);
       res.status(500).json({ error: err.message || "Failed to proxy transaction submission to Google Sheets" });

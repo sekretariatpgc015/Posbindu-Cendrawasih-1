@@ -60,9 +60,10 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
     // Clear out the dummy example URL if it was saved to localStorage
     if (stored && stored.includes('_example/exec')) {
       localStorage.removeItem('posbindu_apps_script_url');
-      return '';
+      return localStorage.getItem('posbindu_kunjungan_apps_script_url') || '';
     }
-    return stored || '';
+    if (stored && stored.trim() !== '') return stored;
+    return localStorage.getItem('posbindu_kunjungan_apps_script_url') || '';
   });
   const [sendToGSheets, setSendToGSheets] = useState<boolean>(() => {
     return localStorage.getItem('posbindu_send_to_gsheets') === 'true';
