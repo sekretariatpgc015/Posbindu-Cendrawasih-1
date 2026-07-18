@@ -31,11 +31,7 @@ export default function LoginView({ onLogin, onCancel }: LoginViewProps) {
           </div>
           <h2 className="text-xl font-black text-slate-800">Login Petugas</h2>
           <p className="text-slate-500 text-xs mt-1 text-center">Silakan masuk untuk mengakses fitur input data.</p>
-          <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-700 font-medium text-center w-full">
-            <p>Hint Login Simulasi:</p>
-            <p className="mt-1">Username: <strong>Input PTM</strong> | Pass: <strong>Tersenyum</strong></p>
-            <p className="mt-1">Username: <strong>Finance</strong> | Pass: <strong>Tersenyum</strong></p>
-          </div>
+
         </div>
 
         {error && (

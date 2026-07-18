@@ -35,22 +35,7 @@ export default function BerandaView({ onNavigate }: BerandaViewProps) {
             Platform terpadu untuk pencatatan, pemantauan, dan pelaporan kesehatan warga RW 015 Pesona Gading Cibitung. 
             Mendukung deteksi dini Penyakit Tidak Menular (PTM) menuju masyarakat yang lebih sehat.
           </p>
-          <div className="flex flex-wrap gap-4">
-            <button
-              onClick={() => onNavigate('dashboard')}
-              className="bg-white text-pink-950 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-50 transition-colors shadow-lg shadow-pink-900/10 cursor-pointer"
-            >
-              Lihat Dashboard Statistik
-              <ChevronRight className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => onNavigate('structure')}
-              className="bg-[#FFAFCC] text-pink-950 border border-pink-300 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-300 transition-colors cursor-pointer shadow-sm"
-            >
-              Lihat Struktur Pengurus
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
+
         </div>
         
         {/* Background Decorative Elements */}
