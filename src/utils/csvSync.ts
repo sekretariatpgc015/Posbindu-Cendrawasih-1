@@ -172,6 +172,7 @@ export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
   let idxTglLahir = -1;
   let idxAlamat = -1;
   let idxRt = -1;
+  let idxHubKeluarga = -1;
   
   if (hasHeaders && headerRowIndex !== -1) {
     const header = rows[headerRowIndex].map(h => h.toUpperCase().trim());
@@ -184,6 +185,8 @@ export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
     if (idxTglLahir === -1) idxTglLahir = header.indexOf('TANGGAL LAHIR');
     idxAlamat = header.indexOf('ALAMAT');
     idxRt = header.indexOf('RT');
+    idxHubKeluarga = header.indexOf('HUB. KELUARGA');
+    if (idxHubKeluarga === -1) idxHubKeluarga = header.indexOf('HUBUNGAN KELUARGA');
   }
   
   const parseScientificToFullString = (val: string): string => {
@@ -217,6 +220,7 @@ export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
     let currentTglLahir = '';
     let currentAlamat = '';
     let currentRt = '001';
+    let currentHubKeluarga = '';
     
     if (!hasHeaders || idxNama === -1 || idxNik === -1) {
       // Heuristic detection of core columns
@@ -260,6 +264,7 @@ export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
       currentTglLahir = idxTglLahir !== -1 ? (row[idxTglLahir] || '').trim() : '';
       currentAlamat = idxAlamat !== -1 ? (row[idxAlamat] || '').trim() : '';
       currentRt = idxRt !== -1 ? (row[idxRt] || '') : '001';
+      currentHubKeluarga = idxHubKeluarga !== -1 ? (row[idxHubKeluarga] || '').trim() : '';
     }
     
     let rtNum = parseInt(currentRt, 10);
@@ -279,7 +284,8 @@ export async function fetchGoogleSheetWarga(url: string): Promise<Warga[]> {
       nik: currentNik || `317100000000000${i}`,
       tanggalLahir: birthDate || '1980-01-01',
       alamat: currentAlamat || 'Alamat tidak diketahui',
-      rt: rtFormatted
+      rt: rtFormatted,
+      hubKeluarga: currentHubKeluarga
     });
   }
   

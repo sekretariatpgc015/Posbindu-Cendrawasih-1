@@ -7,6 +7,7 @@ export interface Warga {
   tanggalLahir: string;
   alamat: string;
   rt: string;
+  hubKeluarga?: string;
 }
 
 export interface Kunjungan {

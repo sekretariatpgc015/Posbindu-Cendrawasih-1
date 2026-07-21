@@ -39,6 +39,11 @@ export default function DashboardView({
   const [monthlyFilter, setMonthlyFilter] = useState<'breakdown' | '15-59' | '60+' | 'gender' | 'total'>('breakdown');
   const [monthlyYear, setMonthlyYear] = useState<string>('2026');
   const [monthlyViewMode, setMonthlyViewMode] = useState<'chart' | 'table'>('chart');
+  
+  const [htViewMode, setHtViewMode] = useState<'chart' | 'table'>('chart');
+  const [htFilter, setHtFilter] = useState<'all' | '15-59' | '60+'>('all');
+  const [htYear, setHtYear] = useState<string>('2026');
+
 
   // Google Sheets Kunjungan Data State
   const [externalKunjunganList, setExternalKunjunganList] = useState<Kunjungan[]>([]);
@@ -74,9 +79,12 @@ export default function DashboardView({
   const [isRtDetailOpen, setIsRtDetailOpen] = useState(false);
   const [selectedRtName, setSelectedRtName] = useState<string | null>(null);
 
+  // Helper to validate actual KK
+  const isValidKK = (kk: string) => kk && kk !== '3171000000000000' && !kk.startsWith('KK-GEN-');
+
   // Calculate Summary Cards Data
   const summaryStats = useMemo(() => {
-    const totalKK = new Set(wargaList.map(w => w.noKK)).size;
+    const totalKK = wargaList.filter(w => w.hubKeluarga?.toUpperCase().includes('KEPALA KELUARGA')).length;
     const totalWarga = wargaList.length;
     const totalLaki = wargaList.filter(w => w.jenisKelamin === 'Laki-laki').length;
     const totalPerempuan = wargaList.filter(w => w.jenisKelamin === 'Perempuan').length;
@@ -103,7 +111,7 @@ export default function DashboardView({
         'Total Laki-laki': m15_59 + m60,
         'Total Perempuan': f15_59 + f60,
         'Total Warga': wargaInRt.length,
-        'Total KK': new Set(wargaInRt.map(w => w.noKK).filter(Boolean)).size,
+        'Total KK': wargaInRt.filter(w => w.hubKeluarga?.toUpperCase().includes('KEPALA KELUARGA')).length,
       };
     });
   }, [wargaList]);
@@ -192,6 +200,36 @@ export default function DashboardView({
       };
     });
   }, [activeKunjunganList, monthlyYear]);
+
+  const htByMonthChartData = useMemo(() => {
+    return monthsList.map(m => {
+      const prefix = `${htYear}-${m.value}`;
+      const monthVisits = activeKunjunganList.filter(k => k.tanggal.startsWith(prefix));
+      
+      const riskyCitizensInMonth: { [nik: string]: Kunjungan } = {};
+      monthVisits.forEach(k => {
+        if (k.tdSistolik >= 139 || k.tdDiastolik >= 89) {
+          let include = true;
+          if (htFilter === '15-59' && k.usia >= 60) include = false;
+          if (htFilter === '60+' && k.usia < 60) include = false;
+          if (include) {
+            riskyCitizensInMonth[k.nik] = k;
+          }
+        }
+      });
+      
+      const risky = Object.values(riskyCitizensInMonth);
+      const mRisky = risky.filter(k => k.jenisKelamin === 'Laki-laki').length;
+      const fRisky = risky.filter(k => k.jenisKelamin === 'Perempuan').length;
+      
+      return {
+        month: m.label,
+        'Laki-laki': mRisky,
+        'Perempuan': fRisky,
+        'Total': risky.length
+      };
+    });
+  }, [activeKunjunganList, htYear, htFilter]);
 
   const trendChartData = useMemo(() => {
     const monthYearCounts: Record<string, number> = {};
@@ -289,7 +327,7 @@ export default function DashboardView({
     const rts = Array.from(new Set(wargaList.map(w => w.rt))).sort();
     return rts.map(rt => {
       const wargaInRt = wargaList.filter(w => w.rt === rt);
-      const kks = Array.from(new Set(wargaInRt.map(w => w.noKK).filter(Boolean)));
+      const kks = Array.from(new Set(wargaInRt.map(w => w.noKK).filter(isValidKK)));
       let pusCount = 0;
       kks.forEach(noKK => {
         const familyWarga = wargaInRt.filter(w => w.noKK === noKK);
@@ -311,7 +349,7 @@ export default function DashboardView({
   }, [wargaList]);
 
   const totalPus = useMemo(() => {
-    const kks = Array.from(new Set(wargaList.map(w => w.noKK).filter(Boolean)));
+    const kks = Array.from(new Set(wargaList.map(w => w.noKK).filter(isValidKK)));
     let total = 0;
     kks.forEach(noKK => {
       const familyWarga = wargaList.filter(w => w.noKK === noKK);
@@ -998,6 +1036,113 @@ export default function DashboardView({
                   </td>
                   <td className="py-3.5 px-4 text-center font-extrabold text-emerald-700 bg-emerald-50/50">
                     {monthlyChartData.reduce((acc, row) => acc + row['Total Kunjungan'], 0)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Data Warga Risiko Hipertensi */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between" id="hypertension-chart-card">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div>
+            <h3 className="text-base font-semibold text-slate-800">Data Warga Risiko Hipertensi per Bulan</h3>
+            <p className="text-xs text-slate-400 mt-1">Distribusi dan riwayat warga yang berisiko tinggi terhadap hipertensi (&ge;139/89) berdasarkan jenis kelamin.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Segmented Control for View Mode */}
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setHtViewMode('chart')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${htViewMode === 'chart' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Grafik
+              </button>
+              <button
+                type="button"
+                onClick={() => setHtViewMode('table')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${htViewMode === 'table' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Tabel
+              </button>
+            </div>
+
+            {/* Year selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Tahun:</span>
+              <select
+                value={htYear}
+                onChange={(e) => setHtYear(e.target.value)}
+                className="px-3 py-1.5 text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer"
+              >
+                {annualYears.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter dropdown */}
+            <select
+              value={htFilter}
+              onChange={(e) => setHtFilter(e.target.value as any)}
+              className="px-3 py-1.5 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
+            >
+              <option value="all">Semua Usia</option>
+              <option value="15-59">15-59 Th</option>
+              <option value="60+">60+ Th</option>
+            </select>
+          </div>
+        </div>
+
+        {htViewMode === 'chart' ? (
+          <div className="h-80 w-full animate-fade-in">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={htByMonthChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: '12px', borderColor: '#f1f5f9' }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                
+                <Bar dataKey="Laki-laki" fill="#4f46e5" radius={[4, 4, 0, 0]} name="Laki-laki" />
+                <Bar dataKey="Perempuan" fill="#db2777" radius={[4, 4, 0, 0]} name="Perempuan" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="overflow-x-auto w-full border border-slate-100 rounded-xl animate-fade-in">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-4">Bulan ({htYear})</th>
+                  <th className="py-3 px-4 text-center">Laki-laki</th>
+                  <th className="py-3 px-4 text-center">Perempuan</th>
+                  <th className="py-3 px-4 text-center font-bold text-slate-700 bg-slate-50/50">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {htByMonthChartData.map((row) => (
+                  <tr key={row.month} className="hover:bg-slate-50/50 transition-all">
+                    <td className="py-3 px-4 font-semibold text-slate-700">{row.month}</td>
+                    <td className="py-3 px-4 text-center text-indigo-600">{row['Laki-laki']}</td>
+                    <td className="py-3 px-4 text-center text-pink-600">{row['Perempuan']}</td>
+                    <td className="py-3 px-4 text-center font-bold text-red-600 bg-red-50/30">{row['Total']}</td>
+                  </tr>
+                ))}
+                {/* Total Row */}
+                <tr className="bg-slate-50/80 font-bold text-slate-800 border-t-2 border-slate-200">
+                  <td className="py-3.5 px-4">Total Setahun</td>
+                  <td className="py-3.5 px-4 text-center text-indigo-700">
+                    {htByMonthChartData.reduce((acc, row) => acc + row['Laki-laki'], 0)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center text-pink-700">
+                    {htByMonthChartData.reduce((acc, row) => acc + row['Perempuan'], 0)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center font-extrabold text-red-700 bg-red-50/50">
+                    {htByMonthChartData.reduce((acc, row) => acc + row['Total'], 0)}
                   </td>
                 </tr>
               </tbody>
