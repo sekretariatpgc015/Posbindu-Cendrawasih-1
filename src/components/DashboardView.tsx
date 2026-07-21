@@ -38,6 +38,7 @@ export default function DashboardView({
   const [rtAgeFilter, setRtAgeFilter] = useState<'all' | '15-59' | '60+'>('all');
   const [monthlyFilter, setMonthlyFilter] = useState<'breakdown' | '15-59' | '60+' | 'gender' | 'total'>('breakdown');
   const [monthlyYear, setMonthlyYear] = useState<string>('2026');
+  const [monthlyViewMode, setMonthlyViewMode] = useState<'chart' | 'table'>('chart');
 
   // Google Sheets Kunjungan Data State
   const [externalKunjunganList, setExternalKunjunganList] = useState<Kunjungan[]>([]);
@@ -119,12 +120,20 @@ export default function DashboardView({
     return years.length > 0 ? years : ['2024', '2025', '2026'];
   }, [activeKunjunganList]);
 
+  // Set the default/initial year of monthly chart to the most recent year available
+  useEffect(() => {
+    if (annualYears.length > 0) {
+      const latestYear = annualYears[annualYears.length - 1];
+      setMonthlyYear(latestYear);
+    }
+  }, [annualYears]);
+
   const annualChartData = useMemo(() => {
     return annualYears.map(year => {
       const yearVisits = activeKunjunganList.filter(k => k.tanggal.startsWith(year));
       
-      const m15_59 = yearVisits.filter(k => k.jenisKelamin === 'Laki-laki' && k.usia >= 15 && k.usia <= 59).length;
-      const f15_59 = yearVisits.filter(k => k.jenisKelamin === 'Perempuan' && k.usia >= 15 && k.usia <= 59).length;
+      const m15_59 = yearVisits.filter(k => k.jenisKelamin === 'Laki-laki' && k.usia <= 59).length;
+      const f15_59 = yearVisits.filter(k => k.jenisKelamin === 'Perempuan' && k.usia <= 59).length;
       const m60 = yearVisits.filter(k => k.jenisKelamin === 'Laki-laki' && k.usia >= 60).length;
       const f60 = yearVisits.filter(k => k.jenisKelamin === 'Perempuan' && k.usia >= 60).length;
 
@@ -164,8 +173,8 @@ export default function DashboardView({
       const prefix = `${monthlyYear}-${m.value}`;
       const monthVisits = activeKunjunganList.filter(k => k.tanggal.startsWith(prefix));
 
-      const m15_59 = monthVisits.filter(k => k.jenisKelamin === 'Laki-laki' && k.usia >= 15 && k.usia <= 59).length;
-      const f15_59 = monthVisits.filter(k => k.jenisKelamin === 'Perempuan' && k.usia >= 15 && k.usia <= 59).length;
+      const m15_59 = monthVisits.filter(k => k.jenisKelamin === 'Laki-laki' && k.usia <= 59).length;
+      const f15_59 = monthVisits.filter(k => k.jenisKelamin === 'Perempuan' && k.usia <= 59).length;
       const m60 = monthVisits.filter(k => k.jenisKelamin === 'Laki-laki' && k.usia >= 60).length;
       const f60 = monthVisits.filter(k => k.jenisKelamin === 'Perempuan' && k.usia >= 60).length;
 
@@ -842,7 +851,7 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Monthly Chart Full Width */}
+      {/* Monthly Chart/Table Full Width */}
       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between" id="monthly-chart-card">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
@@ -850,6 +859,24 @@ export default function DashboardView({
             <p className="text-xs text-slate-400 mt-1">Statistik pencatatan bulanan untuk mengamati pola kehadiran warga sepanjang tahun.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {/* Segmented Control for View Mode */}
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setMonthlyViewMode('chart')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${monthlyViewMode === 'chart' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Grafik
+              </button>
+              <button
+                type="button"
+                onClick={() => setMonthlyViewMode('table')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${monthlyViewMode === 'table' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Tabel
+              </button>
+            </div>
+
             {/* Year selector */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 font-medium">Tahun:</span>
@@ -865,68 +892,118 @@ export default function DashboardView({
               </select>
             </div>
 
-            {/* Filter dropdown */}
-            <select
-              value={monthlyFilter}
-              onChange={(e) => setMonthlyFilter(e.target.value as any)}
-              className="px-3 py-1.5 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
-            >
-              <option value="breakdown">Detail Kelompok</option>
-              <option value="15-59">15-59 Th</option>
-              <option value="60+">60+ Th</option>
-              <option value="gender">L vs P</option>
-              <option value="total">Total</option>
-            </select>
+            {/* Filter dropdown - only show if chart is active */}
+            {monthlyViewMode === 'chart' && (
+              <select
+                value={monthlyFilter}
+                onChange={(e) => setMonthlyFilter(e.target.value as any)}
+                className="px-3 py-1.5 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
+              >
+                <option value="breakdown">Detail Kelompok</option>
+                <option value="15-59">15-59 Th</option>
+                <option value="60+">60+ Th</option>
+                <option value="gender">L vs P</option>
+                <option value="total">Total</option>
+              </select>
+            )}
           </div>
         </div>
 
-        <div className="h-80 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: '12px', borderColor: '#f1f5f9' }} />
-              <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-              
-               {monthlyFilter === 'breakdown' && (
-                <>
-                  <Line type="monotone" dataKey="Laki-laki 15-59" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="L 15-59" />
-                  <Line type="monotone" dataKey="Perempuan 15-59" stroke="#ec4899" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="P 15-59" />
-                  <Line type="monotone" dataKey="Laki-laki 60+" stroke="#4338ca" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="L 60+" />
-                  <Line type="monotone" dataKey="Perempuan 60+" stroke="#be185d" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="P 60+" />
-                </>
-              )}
+        {monthlyViewMode === 'chart' ? (
+          <div className="h-80 w-full animate-fade-in">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: '12px', borderColor: '#f1f5f9' }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                
+                 {monthlyFilter === 'breakdown' && (
+                  <>
+                    <Line type="monotone" dataKey="Laki-laki 15-59" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="L 15-59" />
+                    <Line type="monotone" dataKey="Perempuan 15-59" stroke="#ec4899" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="P 15-59" />
+                    <Line type="monotone" dataKey="Laki-laki 60+" stroke="#4338ca" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="L 60+" />
+                    <Line type="monotone" dataKey="Perempuan 60+" stroke="#be185d" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} name="P 60+" />
+                  </>
+                )}
 
-              {monthlyFilter === '15-59' && (
-                <>
-                  <Line type="monotone" dataKey="Laki-laki 15-59" stroke="#6366f1" strokeWidth={2.5} name="L 15-59" />
-                  <Line type="monotone" dataKey="Perempuan 15-59" stroke="#ec4899" strokeWidth={2.5} name="P 15-59" />
-                  <Line type="monotone" dataKey="Total 15-59" stroke="#10b981" strokeWidth={2.5} name="Total 15-59" />
-                </>
-              )}
+                {monthlyFilter === '15-59' && (
+                  <>
+                    <Line type="monotone" dataKey="Laki-laki 15-59" stroke="#6366f1" strokeWidth={2.5} name="L 15-59" />
+                    <Line type="monotone" dataKey="Perempuan 15-59" stroke="#ec4899" strokeWidth={2.5} name="P 15-59" />
+                    <Line type="monotone" dataKey="Total 15-59" stroke="#10b981" strokeWidth={2.5} name="Total 15-59" />
+                  </>
+                )}
 
-              {monthlyFilter === '60+' && (
-                <>
-                  <Line type="monotone" dataKey="Laki-laki 60+" stroke="#4338ca" strokeWidth={2.5} name="L 60+" />
-                  <Line type="monotone" dataKey="Perempuan 60+" stroke="#be185d" strokeWidth={2.5} name="P 60+" />
-                  <Line type="monotone" dataKey="Total 60+" stroke="#10b981" strokeWidth={2.5} name="Total 60+" />
-                </>
-              )}
+                {monthlyFilter === '60+' && (
+                  <>
+                    <Line type="monotone" dataKey="Laki-laki 60+" stroke="#4338ca" strokeWidth={2.5} name="L 60+" />
+                    <Line type="monotone" dataKey="Perempuan 60+" stroke="#be185d" strokeWidth={2.5} name="P 60+" />
+                    <Line type="monotone" dataKey="Total 60+" stroke="#10b981" strokeWidth={2.5} name="Total 60+" />
+                  </>
+                )}
 
-              {monthlyFilter === 'gender' && (
-                <>
-                  <Line type="monotone" dataKey="Total Laki-laki" stroke="#4f46e5" strokeWidth={2.5} name="Total L" />
-                  <Line type="monotone" dataKey="Total Perempuan" stroke="#db2777" strokeWidth={2.5} name="Total P" />
-                </>
-              )}
+                {monthlyFilter === 'gender' && (
+                  <>
+                    <Line type="monotone" dataKey="Total Laki-laki" stroke="#4f46e5" strokeWidth={2.5} name="Total L" />
+                    <Line type="monotone" dataKey="Total Perempuan" stroke="#db2777" strokeWidth={2.5} name="Total P" />
+                  </>
+                )}
 
-              {monthlyFilter === 'total' && (
-                <Line type="monotone" dataKey="Total Kunjungan" stroke="#10b981" strokeWidth={3} dot={{ r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 7 }} name="Total Kunjungan Warga" />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+                {monthlyFilter === 'total' && (
+                  <Line type="monotone" dataKey="Total Kunjungan" stroke="#10b981" strokeWidth={3} dot={{ r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 7 }} name="Total Kunjungan Warga" />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="overflow-x-auto w-full border border-slate-100 rounded-xl animate-fade-in">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-4">Bulan ({monthlyYear})</th>
+                  <th className="py-3 px-4 text-center">L (15-59 Th)</th>
+                  <th className="py-3 px-4 text-center">P (15-59 Th)</th>
+                  <th className="py-3 px-4 text-center">L (60+ Th)</th>
+                  <th className="py-3 px-4 text-center">P (60+ Th)</th>
+                  <th className="py-3 px-4 text-center font-bold text-slate-700 bg-slate-50/50">Total Kunjungan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {monthlyChartData.map((row) => (
+                  <tr key={row.month} className="hover:bg-slate-50/50 transition-all">
+                    <td className="py-3 px-4 font-semibold text-slate-600">{row.month}</td>
+                    <td className="py-3 px-4 text-center text-indigo-600 font-medium">{row['Laki-laki 15-59']}</td>
+                    <td className="py-3 px-4 text-center text-pink-600 font-medium">{row['Perempuan 15-59']}</td>
+                    <td className="py-3 px-4 text-center text-blue-800 font-medium">{row['Laki-laki 60+']}</td>
+                    <td className="py-3 px-4 text-center text-rose-700 font-medium">{row['Perempuan 60+']}</td>
+                    <td className="py-3 px-4 text-center font-bold text-slate-800 bg-emerald-50/30">{row['Total Kunjungan']}</td>
+                  </tr>
+                ))}
+                {/* Total Row */}
+                <tr className="bg-slate-50/80 font-bold text-slate-800 border-t-2 border-slate-200">
+                  <td className="py-3.5 px-4">Total Setahun</td>
+                  <td className="py-3.5 px-4 text-center text-indigo-700">
+                    {monthlyChartData.reduce((acc, row) => acc + row['Laki-laki 15-59'], 0)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center text-pink-700">
+                    {monthlyChartData.reduce((acc, row) => acc + row['Perempuan 15-59'], 0)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center text-blue-900">
+                    {monthlyChartData.reduce((acc, row) => acc + row['Laki-laki 60+'], 0)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center text-rose-900">
+                    {monthlyChartData.reduce((acc, row) => acc + row['Perempuan 60+'], 0)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center font-extrabold text-emerald-700 bg-emerald-50/50">
+                    {monthlyChartData.reduce((acc, row) => acc + row['Total Kunjungan'], 0)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Pop-up Jendela Detail Demografi RT */}

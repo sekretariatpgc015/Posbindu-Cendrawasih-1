@@ -50,18 +50,72 @@ export function parseCSV(text: string): string[][] {
 }
 
 /**
- * Normalizes birthdate string from DD/MM/YYYY to YYYY-MM-DD
+ * Normalizes birthdate string from DD/MM/YYYY or DD-MM-YYYY or YYYY-MM-DD to YYYY-MM-DD
  */
 export function parseDateToYYYYMMDD(dateStr: string): string {
   if (!dateStr) return '';
-  const parts = dateStr.trim().split('/');
+  const clean = dateStr.trim();
+  const separator = clean.includes('/') ? '/' : clean.includes('-') ? '-' : '';
+  if (!separator) return dateStr;
+  
+  const parts = clean.split(separator);
   if (parts.length === 3) {
-    const day = parts[0].padStart(2, '0');
-    const month = parts[1].padStart(2, '0');
-    const year = parts[2];
-    return `${year}-${month}-${day}`;
+    let day = '';
+    let month = '';
+    let year = '';
+    
+    // Check if parts[0] is year (YYYY-MM-DD)
+    if (parts[0].length === 4) {
+      year = parts[0];
+      month = parts[1].padStart(2, '0');
+      day = parts[2].padStart(2, '0');
+    } else {
+      // Assuming DD-MM-YYYY or DD/MM/YYYY
+      day = parts[0].padStart(2, '0');
+      month = parts[1].padStart(2, '0');
+      year = parts[2];
+      
+      if (year.length === 2) {
+        const yr = parseInt(year, 10);
+        year = yr > 50 ? `19${year}` : `20${year}`;
+      }
+    }
+    
+    if (day && month && year) {
+      return `${year}-${month}-${day}`;
+    }
   }
   return dateStr;
+}
+
+/**
+ * Extracts birth date (YYYY-MM-DD) from Indonesian NIK (16 digits)
+ */
+export function getBirthdateFromNIK(nik: string): string {
+  if (!nik) return '';
+  const cleanNik = nik.trim().replace(/\s/g, '');
+  if (cleanNik.length !== 16 || !/^\d+$/.test(cleanNik)) return '';
+  
+  const dayStr = cleanNik.substring(6, 8);
+  const monthStr = cleanNik.substring(8, 10);
+  const yearStr = cleanNik.substring(10, 12);
+  
+  let day = parseInt(dayStr, 10);
+  const month = parseInt(monthStr, 10);
+  const year = parseInt(yearStr, 10);
+  
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return '';
+  if (month < 1 || month > 12) return '';
+  
+  if (day > 40) {
+    day -= 40;
+  }
+  if (day < 1 || day > 31) return '';
+  
+  const currentYearLastTwo = new Date().getFullYear() % 100;
+  const fullYear = year > currentYearLastTwo ? 1900 + year : 2000 + year;
+  
+  return `${fullYear}-${monthStr.padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
 }
 
 const DIRECT_WARGA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTYG3FkCHn7OXTyiLCtqdLwFkFexQQVXVlPtwpxIOlzWt3mpcCZbMyYDp2p4PabbbQnB1GciwkokN20/pub?gid=1055267267&single=true&output=csv';
@@ -515,18 +569,39 @@ export async function fetchGoogleSheetKunjungan(url: string): Promise<Kunjungan[
     if (isNaN(rtNum)) rtNum = 1;
     const rtFormatted = rtNum.toString().padStart(3, '0');
 
-    const visitDate = parseDateToYYYYMMDD(currentTanggal);
-    const birthDate = parseDateToYYYYMMDD(currentTglLahir);
+    const visitDate = parseDateToYYYYMMDD(currentTanggal) || '2026-07-04';
+    let birthDate = parseDateToYYYYMMDD(currentTglLahir);
+
+    if (!birthDate && currentNik) {
+      birthDate = getBirthdateFromNIK(currentNik);
+    }
+    if (!birthDate) {
+      birthDate = '1980-01-01';
+    }
+
+    let finalUsia = currentUsia;
+    if ((finalUsia === 0 || !finalUsia) && birthDate && visitDate) {
+      const bDate = new Date(birthDate);
+      const vDate = new Date(visitDate);
+      if (!isNaN(bDate.getTime()) && !isNaN(vDate.getTime())) {
+        let age = vDate.getFullYear() - bDate.getFullYear();
+        const m = vDate.getMonth() - bDate.getMonth();
+        if (m < 0 || (m === 0 && vDate.getDate() < bDate.getDate())) {
+          age--;
+        }
+        finalUsia = age >= 0 ? age : 0;
+      }
+    }
 
     parsedKunjunganList.push({
       id: `g_sheet_visit_${i}`,
       no: rawNo,
-      tanggal: visitDate || '2026-07-04',
+      tanggal: visitDate,
       nama: currentNama || 'Tanpa Nama',
       jenisKelamin,
       nik: currentNik,
-      tanggalLahir: birthDate || '1980-01-01',
-      usia: currentUsia,
+      tanggalLahir: birthDate,
+      usia: finalUsia,
       alamat: currentAlamat || 'Alamat tidak diketahui',
       rt: rtFormatted,
       tdSistolik,

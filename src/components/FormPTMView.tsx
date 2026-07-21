@@ -583,25 +583,76 @@ export default function FormPTMView({ wargaList, kunjunganList, onSaveKunjungan,
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
-    // Clean up or extract date part if it has time
-    const cleanDateStr = dateStr.trim().split(' ')[0];
+    
+    // Clean up or extract date part if it has time (e.g. ISO string split with T, or split with space)
+    let cleanDateStr = dateStr.trim();
+    if (cleanDateStr.includes('T')) {
+      cleanDateStr = cleanDateStr.split('T')[0];
+    } else {
+      cleanDateStr = cleanDateStr.split(' ')[0];
+    }
     
     // Split by - or /
     const separator = cleanDateStr.includes('-') ? '-' : '/';
     const parts = cleanDateStr.split(separator);
     
     if (parts.length === 3) {
-      // Check if it's YYYY at the beginning
+      let day = '';
+      let monthStr = '';
+      let year = '';
+
       if (parts[0].length === 4) {
-        const [year, month, day] = parts;
-        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+        // YYYY-MM-DD or YYYY/MM/DD
+        year = parts[0];
+        monthStr = parts[1];
+        day = parts[2];
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY or DD/MM/YYYY
+        day = parts[0];
+        monthStr = parts[1];
+        year = parts[2];
+      } else if (parts[2].length === 2) {
+        // DD-MM-YY or DD/MM/YY
+        day = parts[0];
+        monthStr = parts[1];
+        const yy = parseInt(parts[2], 10);
+        year = yy > 50 ? `19${parts[2]}` : `20${parts[2]}`;
       }
-      // Check if it's YYYY at the end
-      if (parts[2].length === 4) {
-        const [day, month, year] = parts;
-        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+
+      if (day && monthStr && year) {
+        let monthVal = parseInt(monthStr, 10);
+        if (isNaN(monthVal)) {
+          // It's a string name (e.g. "Mei", "Jan", etc.)
+          const lower = monthStr.toLowerCase();
+          if (lower.startsWith('jan')) monthVal = 1;
+          else if (lower.startsWith('feb')) monthVal = 2;
+          else if (lower.startsWith('mar')) monthVal = 3;
+          else if (lower.startsWith('apr')) monthVal = 4;
+          else if (lower.startsWith('mei') || lower.startsWith('may')) monthVal = 5;
+          else if (lower.startsWith('jun')) monthVal = 6;
+          else if (lower.startsWith('jul')) monthVal = 7;
+          else if (lower.startsWith('agu') || lower.startsWith('ags') || lower.startsWith('aug')) monthVal = 8;
+          else if (lower.startsWith('sep')) monthVal = 9;
+          else if (lower.startsWith('okt') || lower.startsWith('oct')) monthVal = 10;
+          else if (lower.startsWith('nov')) monthVal = 11;
+          else if (lower.startsWith('des') || lower.startsWith('dec')) monthVal = 12;
+        }
+        
+        if (!isNaN(monthVal) && monthVal >= 1 && monthVal <= 12) {
+          return `${day.padStart(2, '0')}/${String(monthVal).padStart(2, '0')}/${year}`;
+        }
       }
     }
+
+    // Try parsing as standard JS Date as fallback
+    const parsedDate = new Date(dateStr);
+    if (!isNaN(parsedDate.getTime())) {
+      const d = parsedDate.getDate().toString().padStart(2, '0');
+      const m = (parsedDate.getMonth() + 1).toString().padStart(2, '0');
+      const y = parsedDate.getFullYear();
+      return `${d}/${m}/${y}`;
+    }
+
     return dateStr;
   };
 

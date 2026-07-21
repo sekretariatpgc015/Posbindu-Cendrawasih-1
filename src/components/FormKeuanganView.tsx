@@ -231,6 +231,55 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
     handleSyncGoogleSheet(true);
   }, [jenisKasFilter]);
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    const cleanDateStr = dateStr.trim().split(' ')[0];
+    const separator = cleanDateStr.includes('-') ? '-' : '/';
+    const parts = cleanDateStr.split(separator);
+    
+    if (parts.length === 3) {
+      let day = '';
+      let monthStr = '';
+      let year = '';
+
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        year = parts[0];
+        monthStr = parts[1];
+        day = parts[2];
+      } else if (parts[2].length === 4) {
+        // DD-MM-YYYY
+        day = parts[0];
+        monthStr = parts[1];
+        year = parts[2];
+      }
+
+      if (day && monthStr && year) {
+        let monthVal = parseInt(monthStr, 10);
+        if (isNaN(monthVal)) {
+          const lower = monthStr.toLowerCase();
+          if (lower.startsWith('jan')) monthVal = 1;
+          else if (lower.startsWith('feb')) monthVal = 2;
+          else if (lower.startsWith('mar')) monthVal = 3;
+          else if (lower.startsWith('apr')) monthVal = 4;
+          else if (lower.startsWith('mei') || lower.startsWith('may')) monthVal = 5;
+          else if (lower.startsWith('jun')) monthVal = 6;
+          else if (lower.startsWith('jul')) monthVal = 7;
+          else if (lower.startsWith('agu') || lower.startsWith('ags') || lower.startsWith('aug')) monthVal = 8;
+          else if (lower.startsWith('sep')) monthVal = 9;
+          else if (lower.startsWith('okt') || lower.startsWith('oct')) monthVal = 10;
+          else if (lower.startsWith('nov')) monthVal = 11;
+          else if (lower.startsWith('des') || lower.startsWith('dec')) monthVal = 12;
+        }
+        
+        if (!isNaN(monthVal) && monthVal >= 1 && monthVal <= 12) {
+          return `${day.padStart(2, '0')}/${String(monthVal).padStart(2, '0')}/${year}`;
+        }
+      }
+    }
+    return dateStr;
+  };
+
   // Export cash ledger to CSV
   const handleExportCSV = () => {
     // Filter transactions by the active jenisKasFilter (e.g., Kas Posbindu)
@@ -248,7 +297,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
       ['TANGGAL', 'URAIAN', 'PEMASUKAN', 'PENGELUARAN'].join(','),
       ...sorted.map((item) => {
         const escapedDesc = `"${item.keterangan.replace(/"/g, '""')}"`;
-        const formattedDate = item.tanggal.split('-').reverse().join('/'); // DD/MM/YYYY
+        const formattedDate = formatDate(item.tanggal);
         
         const isIncome = item.kategori === 'Pemasukan';
         const pemasukanValue = isIncome ? item.jumlah : '';
@@ -964,7 +1013,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                         const isIncome = item.kategori === 'Pemasukan';
                         return (
                           <tr key={item.id} className="hover:bg-slate-50/50 transition-all">
-                            <td className="py-3 px-4 whitespace-nowrap">{item.tanggal.split('-').reverse().join('/')}</td>
+                            <td className="py-3 px-4 whitespace-nowrap">{formatDate(item.tanggal)}</td>
                             <td className="py-3 px-4 font-medium text-slate-800 break-words max-w-[240px]" title={item.keterangan}>
                               {item.keterangan}
                             </td>
@@ -1263,7 +1312,7 @@ export default function FormKeuanganView({ keuanganList, onSaveKeuangan, onDelet
                             return (
                               <tr key={item.id} className="hover:bg-slate-50">
                                 <td className="py-2 px-3 border-r border-slate-200 whitespace-nowrap">
-                                  {item.tanggal.split('-').reverse().join('/')}
+                                  {formatDate(item.tanggal)}
                                 </td>
                                 <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-900">
                                   {item.keterangan}
